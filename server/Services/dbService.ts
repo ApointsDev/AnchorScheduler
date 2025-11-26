@@ -3,6 +3,7 @@ import { open, Database } from 'sqlite';
 import { User, Task } from '../index';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../Utils/logger.js';
+import { toShanghaiISO } from '../Utils/time.js';
 import { assertNoConflict } from './scheduleConflict';
 
 class DatabaseService {
@@ -288,13 +289,13 @@ class DatabaseService {
         }
         // 规范化时间字段为 UTC ISO 字符串，避免不同时区/格式导致的字符串比较错误
         try {
-            if (task.startTime) task.startTime = new Date(task.startTime).toISOString();
+            if (task.startTime) task.startTime = toShanghaiISO(task.startTime);
         } catch (e) {}
         try {
-            if (task.endTime) task.endTime = new Date(task.endTime).toISOString();
+            if (task.endTime) task.endTime = toShanghaiISO(task.endTime);
         } catch (e) {}
         try {
-            if (task.dueDate) task.dueDate = new Date(task.dueDate).toISOString();
+            if (task.dueDate) task.dueDate = toShanghaiISO(task.dueDate);
         } catch (e) {}
 
         await this.db.run(
@@ -323,9 +324,9 @@ class DatabaseService {
             }
         }
         // 规范化时间字段为 UTC ISO
-        try { if (task.startTime) task.startTime = new Date(task.startTime).toISOString(); } catch (e) {}
-        try { if (task.endTime) task.endTime = new Date(task.endTime).toISOString(); } catch (e) {}
-        try { if (task.dueDate) task.dueDate = new Date(task.dueDate).toISOString(); } catch (e) {}
+        try { if (task.startTime) task.startTime = toShanghaiISO(task.startTime); } catch (e) {}
+        try { if (task.endTime) task.endTime = toShanghaiISO(task.endTime); } catch (e) {}
+        try { if (task.dueDate) task.dueDate = toShanghaiISO(task.dueDate); } catch (e) {}
 
         await this.db.run(
             `UPDATE tasks 
@@ -360,13 +361,13 @@ class DatabaseService {
 
         // 规范化时间字段（若在更新中出现）以 UTC ISO 格式写入
         if (updates.startTime) {
-            try { updates.startTime = new Date(updates.startTime as string).toISOString(); } catch (e) {}
+            try { updates.startTime = toShanghaiISO(updates.startTime as string); } catch (e) {}
         }
         if (updates.endTime) {
-            try { updates.endTime = new Date(updates.endTime as string).toISOString(); } catch (e) {}
+            try { updates.endTime = toShanghaiISO(updates.endTime as string); } catch (e) {}
         }
         if (updates.dueDate) {
-            try { updates.dueDate = new Date(updates.dueDate as string).toISOString(); } catch (e) {}
+            try { updates.dueDate = toShanghaiISO(updates.dueDate as string); } catch (e) {}
         }
 
         const setClauses = fields.map(f => `${f} = ?`).join(', ');

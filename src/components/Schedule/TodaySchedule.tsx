@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getTasks, type Task, updateTask } from '../../services/api';
 import { useWeek } from '../../context/WeekContext';
 import { format, parseISO } from 'date-fns';
+import { toShanghaiISO } from '../../utils/time';
 import { zhCN } from 'date-fns/locale';
 import { Calendar, CheckCircle2, Circle, Plus, RefreshCw } from 'lucide-react';
 import ScheduleCard from './ScheduleCard';
@@ -39,9 +40,9 @@ const TodaySchedule: React.FC = () => {
       
       // 打印本地时间和 UTC 查询时间，方便调试
       console.log(`Fetching today's tasks (Local): ${format(start, 'yyyy-MM-dd HH:mm:ss')} to ${format(end, 'yyyy-MM-dd HH:mm:ss')}`);
-      console.log(`Fetching today's tasks (UTC): ${start.toISOString()} to ${end.toISOString()}`);
+      console.log(`Fetching today's tasks (Shanghai ISO): ${toShanghaiISO(start)} to ${toShanghaiISO(end)}`);
       
-      const response = await getTasks({ start: start.toISOString(), end: end.toISOString(), limit: 500 });
+      const response = await getTasks({ start: toShanghaiISO(start), end: toShanghaiISO(end), limit: 500 });
       console.log(`Fetched ${response.tasks.length} tasks for today`);
       setTasks(response.tasks);
     } catch (error) {

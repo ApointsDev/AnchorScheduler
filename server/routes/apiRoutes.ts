@@ -4,6 +4,7 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { User, Task } from '../index';
 import { logger } from '../Utils/logger.js';
+import { toShanghaiISO } from '../Utils/time.js';
 import { dbService } from '../Services/dbService.js';
 import { mcpTools } from '../Services/mcp.js';
 import { findConflictingTasks, ScheduleConflictError } from '../Services/scheduleConflict.js';
@@ -61,11 +62,11 @@ export function initializeApiRoutes(authenticateToken: AuthMiddleware) {
   router.post('/status/microsoft-todo', authenticateToken, async (req: any, res: any) => {
     try {
       const user = req.user as User;
-      const status = {
+        const status = {
         connected: !!user.MStoken,
         binded: user.MSbinded,
         tokenAvailable: !!user.MStoken,
-        lastChecked: new Date().toISOString()
+        lastChecked: toShanghaiISO()
       };
 
       // 如果有token，尝试验证token是否有效
@@ -97,7 +98,7 @@ export function initializeApiRoutes(authenticateToken: AuthMiddleware) {
         passwordAvailable: !!user.XJTLUPassword,
         emsClientAvailable: !!user.emsClient,
         timetableUrl: null,
-        lastChecked: new Date().toISOString()
+        lastChecked: toShanghaiISO()
       };
 
       // 立即发送响应给客户端
@@ -111,8 +112,8 @@ export function initializeApiRoutes(authenticateToken: AuthMiddleware) {
 
   // 手动触发课表同步
   router.post('/sync/timetable', authenticateToken, async (req: any, res: any) => {
+    const user = req.user as User;
     try {
-      const user = req.user as User;
       if (!user.ebridgeBinded || !user.timetableUrl) {
         return res.status(400).json({ error: 'User not bound to Ebridge or missing timetable URL' });
       }
@@ -125,6 +126,9 @@ export function initializeApiRoutes(authenticateToken: AuthMiddleware) {
       });
     } catch (error: any) {
       logger.error('Manual timetable sync failed:', error);
+      if (user.XJTLUPassword) {
+        return res.status(500).json({ error: '请稍等，大约两分钟就好', details: "由于你刚刚绑定ebridge，获取课程表数据需要一段时间，请稍等。" });
+      }
       return res.status(500).json({ error: 'Failed to sync timetable', details: error.message });
     }
   });
@@ -421,7 +425,7 @@ export function initializeApiRoutes(authenticateToken: AuthMiddleware) {
       }
       user.conflictBoundaryInclusive = boundaryConflictInclusive;
       await dbService.updateUser(user);
-      return res.status(200).json({ boundaryConflictInclusive, updatedAt: new Date().toISOString() });
+      return res.status(200).json({ boundaryConflictInclusive, updatedAt: toShanghaiISO() });
     } catch (error) {
       logger.error('Failed to update conflict mode:', error);
       return res.status(500).json({ error: 'Failed to update conflict mode' });

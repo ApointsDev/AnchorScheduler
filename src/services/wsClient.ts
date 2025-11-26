@@ -13,7 +13,7 @@ class WSClient {
   connectIfNeeded(token: string) {
     if (!token) return;
     // if already connected with same token, noop
-    if (this.socket && this.token === token && this.socket.readyState === WebSocket.OPEN) return;
+    if (this.socket && this.token === token && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) return;
     this.token = token;
     this.url = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000').replace(/^http/, 'ws').replace(/^https/, 'wss') + `/ws?token=${token}`;
     this.isClosing = false;
@@ -34,6 +34,10 @@ class WSClient {
       this.socket.onmessage = (evt) => {
         try {
           const data = JSON.parse(evt.data);
+          // auto-reply to server heartbeat ping with application-level pong
+          if (data && data.type === 'ping') {
+            this.send({ type: 'pong' });
+          }
           this.dispatch(data);
         } catch (e) {
           // ignore
@@ -52,6 +56,16 @@ class WSClient {
     } catch (e) {
       // schedule reconnect
       setTimeout(() => this.setupSocket(), this.reconnectDelay);
+    }
+  }
+
+  private send(obj: any) {
+    try {
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify(obj));
+      }
+    } catch (e) {
+      // ignore send errors
     }
   }
 

@@ -14,6 +14,7 @@ import { ScheduleConflictError } from './Services/scheduleConflict';
 import { initWebSocket, broadcastTaskChange, broadcastUserLog } from './Services/websocket';
 import { logUserEvent } from './Services/userLog';
 import { logger } from './Utils/logger.js';
+import { toShanghaiISO } from './Utils/time.js';
 import { EmailMessageSchema, SearchFilter } from 'ews-javascript-api';
 import { startIntervals } from './intervals';
 import { initializeMcpRoutes } from './Services/mcp';
@@ -284,9 +285,9 @@ app.post('/register', async (req, res) => {
                 id: uuidv4(),
                 name: '测试任务',
                 description: '恭喜你成功注册时锚平台~新的任务会推送到这里哦',
-                dueDate: new Date().toISOString(),
-                startTime: new Date().toISOString(),
-                endTime: new Date().toISOString(),
+                dueDate: toShanghaiISO(),
+                startTime: toShanghaiISO(),
+                endTime: toShanghaiISO(),
                 completed: false,
                 pushedToMSTodo: false,
                 scheduleType: 'single',

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
+import { toShanghaiISO } from '../../utils/time';
 import { createTask, createTasksBatch, ScheduleConflictError, type Task, type ScheduleType } from '../../services/api';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -105,9 +106,9 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
               name: currentEvent.summary,
               description: currentEvent.description || '',
               location: currentEvent.location || '',
-              startTime: currentEvent.dtStart.toISOString(),
-              endTime: currentEvent.dtEnd.toISOString(),
-              dueDate: currentEvent.dtEnd.toISOString(),
+              startTime: toShanghaiISO(currentEvent.dtStart),
+              endTime: toShanghaiISO(currentEvent.dtEnd),
+              dueDate: toShanghaiISO(currentEvent.dtEnd),
               pushedToMSTodo: false,
               scheduleType: 'single',
             });
@@ -185,9 +186,9 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
           name: newTask.name,
           description: newTask.description,
           location: newTask.location,
-          startTime: startTime.toISOString(),
-          endTime: endTime.toISOString(),
-          dueDate: endTime.toISOString(),
+          startTime: toShanghaiISO(startTime),
+          endTime: toShanghaiISO(endTime),
+          dueDate: toShanghaiISO(endTime),
           pushedToMSTodo: false,
           importance: newTask.importance,
           scheduleType,
@@ -198,9 +199,9 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onTaskCrea
           name: newTask.name,
           description: newTask.description,
           location: newTask.location,
-          startTime: dueDate.toISOString(),
-          endTime: dueDate.toISOString(),
-          dueDate: dueDate.toISOString(),
+          startTime: toShanghaiISO(dueDate),
+          endTime: toShanghaiISO(dueDate),
+          dueDate: toShanghaiISO(dueDate),
           pushedToMSTodo: false,
           importance: newTask.importance,
           scheduleType,

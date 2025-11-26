@@ -3,12 +3,16 @@ import type { WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
 import { Task, User } from '../index';
 import { logger } from '../Utils/logger.js';
+import { toShanghaiISO } from '../Utils/time.js';
 import jwt from 'jsonwebtoken';
 
 let wss: WebSocketServer | null = null;
 let userProvider: (() => Iterable<User>) | null = null;
 const occurrenceNotified = new Set<string>();
 const JWT_SECRET = process.env.JWT_SECRET || '';
+
+// Map to keep track of the current active socket per userId
+const userSockets: Map<string, AuthedSocket> = new Map();
 
 interface AuthedSocket extends WebSocket { userId?: string; isAlive?: boolean; }
 let heartbeatInterval: NodeJS.Timeout | null = null;
@@ -17,9 +21,31 @@ export function initWebSocket(httpServer: any, provider: () => Iterable<User>) {
   userProvider = provider;
   wss = new WebSocketServer({ server: httpServer, path: '/ws' });
   wss.on('connection', (socket: AuthedSocket, req: IncomingMessage) => {
-    // heartbeat init
+    // heartbeat init (use application-level ping/pong so browsers stay compatible)
     socket.isAlive = true;
-    socket.on && socket.on('pong', () => { socket.isAlive = true; });
+    socket.on && socket.on('message', (data: WebSocket.RawData) => {
+      try {
+        const raw = typeof data === 'string' ? data : data.toString();
+        const msg = JSON.parse(raw);
+        if (msg && msg.type === 'pong') socket.isAlive = true;
+      } catch (_) {}
+    });
+
+    // log close/error for easier debugging and remove mapping
+    socket.on && socket.on('close', (code?: number, reason?: Buffer) => {
+      try {
+        logger.info(`WebSocket closed for user=${socket.userId || 'unknown'} code=${code} reason=${reason ? reason.toString() : ''}`);
+      } catch (_) {}
+      try {
+        if (socket.userId) {
+          const cur = userSockets.get(socket.userId);
+          if (cur === socket) userSockets.delete(socket.userId);
+        }
+      } catch (_) {}
+    });
+    socket.on && socket.on('error', (err: any) => {
+      try { logger.error('WebSocket error', err); } catch (_) {}
+    });
 
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const token = url.searchParams.get('token');
@@ -31,7 +57,19 @@ export function initWebSocket(httpServer: any, provider: () => Iterable<User>) {
     try {
       const decoded: any = jwt.verify(token, JWT_SECRET);
       socket.userId = decoded.sub;
-      try { socket.send(JSON.stringify({ type: 'welcome', time: new Date().toISOString(), userId: socket.userId })); } catch(_){}
+      try {
+        // If there is already an active socket for this user, replace it
+        const existing = socket.userId ? userSockets.get(socket.userId) : undefined;
+        if (existing && existing !== socket) {
+          try { existing.close(4000, 'replaced'); } catch (_) {}
+          try { logger.info(`Replaced existing socket for user=${socket.userId}`); } catch(_){}
+        }
+        if (socket.userId) userSockets.set(socket.userId, socket);
+
+        const welcome = { type: 'welcome', time: toShanghaiISO(), userId: socket.userId };
+        socket.send(JSON.stringify(welcome));
+        logger.info(`Sent welcome to user=${socket.userId} at ${welcome.time}`);
+      } catch (_) {}
     } catch (e) {
       try { socket.send(JSON.stringify({ type: 'error', error: 'INVALID_TOKEN' })); } catch(_){}
       try { socket.close(); } catch(_){}
@@ -39,7 +77,7 @@ export function initWebSocket(httpServer: any, provider: () => Iterable<User>) {
     }
   });
 
-  // heartbeat interval
+  // heartbeat interval - use application-level ping (JSON) for browser compatibility
   if (heartbeatInterval) clearInterval(heartbeatInterval);
   heartbeatInterval = setInterval(() => {
     if (!wss) return;
@@ -50,7 +88,11 @@ export function initWebSocket(httpServer: any, provider: () => Iterable<User>) {
         continue;
       }
       s.isAlive = false;
-      try { (client as any).ping?.(); } catch (_) {}
+      try {
+        if ((client as any).readyState === 1) {
+          client.send(JSON.stringify({ type: 'ping' }));
+        }
+      } catch (_) {}
     }
   }, 30000);
 

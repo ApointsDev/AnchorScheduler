@@ -4,6 +4,7 @@ import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+import { toShanghaiISO } from './time.js';
 // 注意：编译后在dist目录运行，但.env文件在server目录
 const envPath = path.resolve(__dirname, '..' , '..', '.env');
 const dotenvResult = dotenv.config({ path: envPath });
@@ -129,7 +130,7 @@ export class Logger {
     try {
       this.rotateLogFile();
       
-      const timestamp = new Date().toISOString();
+      const timestamp = toShanghaiISO();
       const logMessage = `[${timestamp}] [${level}] ${message}`;
       const argsStr = args.length > 0 ? ' ' + args.map(arg => 
         typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)

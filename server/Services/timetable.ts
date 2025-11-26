@@ -7,6 +7,7 @@ import { broadcastTaskChange } from './websocket';
 import { logUserEvent } from './userLog';
 import { logger } from '../Utils/logger.js';
 import { ExchangeClient } from './exchangeClient';
+import { toShanghaiISO } from '../Utils/time.js';
 
 // Local definitions to avoid circular dependency with index.ts
 import { Task, User } from '../index.js';
@@ -120,7 +121,7 @@ export async function syncUserTimetable(user: User, force: boolean = false): Pro
                             const courseEndTime = new Date(courseDate);
                             courseEndTime.setHours(endTimeObj.getHours(), endTimeObj.getMinutes(), endTimeObj.getSeconds());
                             if (courseStartTime >= today) {
-                                const taskId = `timetable_${hash}_${activity.identity || uuidv4()}_${courseDate.toISOString().split('T')[0]}`;
+                                const taskId = `timetable_${hash}_${activity.identity || uuidv4()}_${toShanghaiISO(courseDate).split('T')[0]}`;
                                 const existingTask = user.tasks.find(t => t.id === taskId);
                                 if (!existingTask) {
                                     const currentWeekNumber = getCurrentWeekNumber();
@@ -128,9 +129,9 @@ export async function syncUserTimetable(user: User, force: boolean = false): Pro
                                         id: taskId,
                                         name: activity.name || `${activity.moduleId || 'Unknown'} - ${activity.activityType || 'Activity'}`,
                                         description: `Staff: ${activity.staff || 'Unknown'}\nLocation: ${activity.location || 'Online'}\nWeek Pattern: ${activity.weekPattern || 'N/A'}\nCurrent Week: ${currentWeekNumber}\nDay: ${getDayName(scheduledDay)}`,
-                                        dueDate: courseDate.toISOString(),
-                                        startTime: courseStartTime.toISOString(),
-                                        endTime: courseEndTime.toISOString(),
+                                        dueDate: toShanghaiISO(courseDate),
+                                        startTime: toShanghaiISO(courseStartTime),
+                                        endTime: toShanghaiISO(courseEndTime),
                                         location: activity.location || undefined,
                                         completed: false,
                                         pushedToMSTodo: false,

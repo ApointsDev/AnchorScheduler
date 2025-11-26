@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { IEvent } from './types';
 import { findConflictingTasks, TimeLikeTask } from './scheduleConflict';
 import { logUserEvent } from './userLog';
+import { toShanghaiISO, ensureTimezone } from '../Utils/time.js';
 import { generateRecurrenceInstances, buildRecurrenceSummary } from './recurrence';
 import { broadcastTaskChange } from './websocket';
 import type { MCPToolsMap, MCPToolDefinition, AddScheduleArgs, AddScheduleResult, ReadEmailsArgs, ReadEmailsResult } from './mcpTypes';
@@ -75,30 +76,20 @@ export const mcpTools: MCPToolsMap = {
                 return { content: [{ type: "text" as const, text: "Error: Task name is required." }] };
             }
 
-            // Helper to ensure timezone
-            const ensureTimezone = (timeStr: string) => {
-                if (!timeStr) return timeStr;
-                // Check if it has timezone info (Z or +HH:MM or -HH:MM)
-                if (!/Z|[+-]\d{2}:?\d{2}$/.test(timeStr)) {
-                    return `${timeStr}+08:00`;
-                }
-                return timeStr;
-            };
-
             if (startTime) startTime = ensureTimezone(startTime);
             if (endTime) endTime = ensureTimezone(endTime);
 
-            // Default time logic
-            if (!startTime) startTime = new Date().toISOString();
+            // Default time logic (use Shanghai ISO)
+            if (!startTime) startTime = toShanghaiISO();
             if (!endTime) {
-                const start = new Date(startTime);
+                const start = new Date(startTime as string);
                 start.setHours(start.getHours() + 1);
-                endTime = start.toISOString();
+                endTime = toShanghaiISO(start);
             }
 
             // Validate dates
             const isValidDate = (d: string) => !isNaN(new Date(d).getTime());
-            if (!isValidDate(startTime) || !isValidDate(endTime)) {
+            if (!isValidDate(startTime as string) || !isValidDate(endTime as string)) {
                 return { content: [{ type: "text" as const, text: `Error: Invalid date format. Start=${startTime}, End=${endTime}` }] };
             }
 
@@ -262,7 +253,7 @@ export const mcpTools: MCPToolsMap = {
             // Otherwise (normal external MCP caller), enqueue request and notify user for approval
             try {
                 const db = dbService;
-                const rawRequest = JSON.stringify({ args, timestamp: new Date().toISOString() });
+                const rawRequest = JSON.stringify({ args, timestamp: toShanghaiISO() });
                 const queueId = await db.addScheduleToQueue(user.id, rawRequest);
                 // Log user event and broadcast to connected clients
                 await logUserEvent(user.id, 'external_schedule_request', `外部请求创建日程: ${name}`, { queueId, name, startTime, endTime });
@@ -351,7 +342,7 @@ export const mcpTools: MCPToolsMap = {
         description: "Get the current server time. IMPORTANT:You MUST use this tool to get the current time before scheduling any time related tasks to ensure accurate time references IF there are no time source in the context.",
         schema: {},
         execute: async (args: any, user: User) => {
-            return { content: [{ type: "text" as const, text: new Date().toISOString() }] };
+            return { content: [{ type: "text" as const, text: toShanghaiISO() }] };
         }
     },
     search_tasks: {

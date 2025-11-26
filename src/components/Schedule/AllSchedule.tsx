@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getTasks, type Task } from '../../services/api';
 import { useWeek } from '../../context/WeekContext';
 import { format, startOfWeek, endOfWeek, addDays, startOfMonth, endOfMonth, isSameMonth, isSameDay, parseISO, addMonths, subMonths, differenceInCalendarWeeks } from 'date-fns';
+import { toShanghaiISO } from '../../utils/time';
 import { zhCN } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, Plus } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
@@ -39,11 +40,11 @@ const AllSchedule: React.FC = () => {
     try {
       let start, end;
       if (viewMode === 'month') {
-        start = startOfMonth(currentDate).toISOString();
-        end = endOfMonth(currentDate).toISOString();
+        start = toShanghaiISO(startOfMonth(currentDate));
+        end = toShanghaiISO(endOfMonth(currentDate));
       } else {
-        start = startOfWeek(currentDate, { weekStartsOn: 1 }).toISOString();
-        end = endOfWeek(currentDate, { weekStartsOn: 1 }).toISOString();
+        start = toShanghaiISO(startOfWeek(currentDate, { weekStartsOn: 1 }));
+        end = toShanghaiISO(endOfWeek(currentDate, { weekStartsOn: 1 }));
       }
       
       const response = await getTasks({ start, end, limit: 500 });

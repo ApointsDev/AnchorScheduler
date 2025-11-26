@@ -1,5 +1,6 @@
 import axios from 'axios';
 import moment from 'moment';
+import { toShanghaiISO } from './Utils/time.js';
 import { v4 as uuidv4 } from 'uuid';
 import { Options, PythonShell } from 'python-shell';
 import { ExchangeClient } from './Services/exchangeClient';
@@ -81,8 +82,8 @@ export function startIntervals(getUsers: () => IterableIterator<User>): Interval
                 const emailClient = new ExchangeClient(exchangeConfig, user);
                 try {
                     const events = await emailClient.getEvents(
-                        moment().subtract(1, 'day').toISOString(),
-                        moment().add(1, 'day').toISOString(),
+                        toShanghaiISO(moment().subtract(1, 'day').toDate()),
+                        toShanghaiISO(moment().add(1, 'day').toDate()),
                     );
 
                     logger.info(`Fetched ${events.length} events for user ${user.id}`);

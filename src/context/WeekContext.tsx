@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getWeekInfo, setUserWeek } from '../services/api';
+import { getWeekInfo, setUserWeek, isAuthenticated, authEvents } from '../services/api';
 import type { WeekInfoResponse } from '../services/api';
 
 interface WeekContextValue {
@@ -15,6 +15,7 @@ export const WeekProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshWeek = async () => {
     try {
+      if (!isAuthenticated()) return;
       const wi = await getWeekInfo();
       setWeekInfo(wi);
     } catch (e) {
@@ -23,7 +24,15 @@ export const WeekProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    // only fetch if currently authenticated
     refreshWeek();
+
+    // listen for explicit login events so we can refresh when user logs in
+    const onLogin = () => { refreshWeek(); };
+    authEvents.addEventListener('login', onLogin as EventListener);
+    return () => {
+      authEvents.removeEventListener('login', onLogin as EventListener);
+    };
   }, []);
 
   const setCurrentWeek = async (currentWeek: number) => {

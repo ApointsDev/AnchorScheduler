@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Task } from '../index';
 import { getISOWeek } from 'date-fns';
 import type { RecurrenceRule } from './types';
+import { toShanghaiISO } from '../Utils/time.js';
 
 export function generateRecurrenceInstances(root: Task, rule: RecurrenceRule | any): Task[] {
   const instances: Task[] = [];
@@ -131,9 +132,9 @@ function buildInstance(root: Task, s: Date, e: Date): Task {
     id: uuidv4(),
     name: root.name,
     description: root.description,
-    startTime: s.toISOString(),
-    endTime: e.toISOString(),
-    dueDate: e.toISOString(),
+    startTime: toShanghaiISO(s),
+    endTime: toShanghaiISO(e),
+    dueDate: toShanghaiISO(e),
     location: root.location,
     completed: false,
     pushedToMSTodo: false,

@@ -37,6 +37,7 @@ import { createTodoItem } from './MStodo.js';
 import { User, Task } from '../index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { mcpTools } from './mcp.js';
+import { toShanghaiISO } from '../Utils/time.js';
 
 // 以下代码将禁用 SSL/TLS 证书验证。
 // 如果您的 Exchange 服务器使用自签名证书，则需要此设置。
@@ -100,7 +101,7 @@ export class ExchangeClient {
                 const end = new Date();
                 end.setDate(start.getDate() + 1); // 获取到明天为止的事件
                 
-                const events = await this.getEvents(start.toISOString(), end.toISOString());
+                const events = await this.getEvents(toShanghaiISO(start), toShanghaiISO(end));
                 logger.success(`日历连接测试成功，获取到未来24小时内的 ${events.length} 个事件。`);
                 
                 // 启动推送通知订阅
@@ -330,9 +331,9 @@ export class ExchangeClient {
                 id: uuidv4(),
                 name: appointment.Subject,
                 description: appointment.Body?.Text || '来自Exchange日历的事件',
-                dueDate: appointment.End.ToUniversalTime().ToISOString(),
-                startTime: appointment.Start.ToUniversalTime().ToISOString(),
-                endTime: appointment.End.ToUniversalTime().ToISOString(),
+                dueDate: toShanghaiISO(appointment.End.ToUniversalTime().ToISOString()),
+                startTime: toShanghaiISO(appointment.Start.ToUniversalTime().ToISOString()),
+                endTime: toShanghaiISO(appointment.End.ToUniversalTime().ToISOString()),
                 location: appointment.Location || '',
                 completed: false,
                 pushedToMSTodo: false,
@@ -419,7 +420,7 @@ export class ExchangeClient {
     private logFailedEmail(email: IEmail, error: any) {
         try {
             const failureLog = {
-                timestamp: new Date().toISOString(),
+                timestamp: toShanghaiISO(),
                 emailId: email.id,
                 subject: email.subject,
                 from: email.from,
@@ -526,7 +527,7 @@ export class ExchangeClient {
                 attachmentsCount: attachmentsCount
             };
 
-            const payload = { args: toolArgs, email: safeEmail, _meta: { source: 'exchange', createdAt: new Date().toISOString() } };
+            const payload = { args: toolArgs, email: safeEmail, _meta: { source: 'exchange', createdAt: toShanghaiISO() } };
 
             const rawRequest = JSON.stringify(payload);
             await dbService.addScheduleToQueue(this.user.id, rawRequest);
@@ -832,7 +833,7 @@ export class ExchangeClient {
             id: email.Id.UniqueId,
             subject: email.Subject,
             from: from ? { name: from.Name, address: from.Address } : undefined,
-            receivedAt: email.DateTimeReceived.MomentDate.toISOString(),
+            receivedAt: toShanghaiISO(email.DateTimeReceived.MomentDate.toISOString()),
             isRead: email.IsRead,
             body: bodyText,
             hasAttachments: email.HasAttachments,
@@ -862,8 +863,8 @@ export class ExchangeClient {
         return {
             id: appointment.Id.UniqueId,
             subject: appointment.Subject,
-            start: appointment.Start.MomentDate.toISOString(),
-            end: appointment.End.MomentDate.toISOString(),
+            start: toShanghaiISO(appointment.Start.MomentDate.toISOString()),
+            end: toShanghaiISO(appointment.End.MomentDate.toISOString()),
             location: appointment.Location,
             importance: importance,
             isReminderOn: isReminderOn

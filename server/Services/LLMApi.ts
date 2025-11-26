@@ -4,6 +4,7 @@ import Configuration from 'openai';
 import { IEmail } from './types';
 import { getOpenAITools } from './mcp';
 import { MCPToolNames, type MCPToolNameTypes } from '../Services/mcpTypes.js';
+import { toShanghaiISO } from '../Utils/time.js';
 
 // 定义邮件处理请求和响应接口
 export interface EmailProcessRequest {
@@ -93,7 +94,7 @@ export class LLMApi {
             const messages = [
                 {
                     role: 'system',
-                        content: `你是一个从邮件中提取日程信息专业的邮件分析助手。现在是 ${new Date().toISOString()}。
+                        content: `你是一个从邮件中提取日程信息专业的邮件分析助手。现在是 ${toShanghaiISO()}。
 请分析邮件内容，并调用适当的工具来处理。
 - 如果邮件包含会议、待办事项、截止日期或任何需要安排时间的内容，请先使用工具获得必要的信息，然后调用 'add_schedule'。
 - 你必须从邮件中提取任务名称(name)、开始时间(startTime)和结束时间(endTime)。

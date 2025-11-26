@@ -1,5 +1,6 @@
 import React from 'react';
 import { format, parseISO } from 'date-fns';
+import { toShanghaiISO } from '../../utils/time';
 import { createTask, rejectQueueItem, type ScheduleType } from '../../services/api';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -70,13 +71,13 @@ class QueueTaskModal extends BaseScheduleView<QueueTaskModalProps, QueueTaskStat
     this.setState({ isSubmitting: true, error: '' });
     try {
       const edited = this.state.edited;
-      const data: any = {
+        const data: any = {
         name: edited.name || '未命名请求',
         description: edited.description || '',
         location: edited.location || '',
-        startTime: edited.startTime ? new Date(edited.startTime).toISOString() : new Date().toISOString(),
-        endTime: edited.endTime ? new Date(edited.endTime).toISOString() : new Date().toISOString(),
-        dueDate: edited.endTime ? new Date(edited.endTime).toISOString() : new Date().toISOString(),
+          startTime: edited.startTime ? toShanghaiISO(edited.startTime) : toShanghaiISO(),
+          endTime: edited.endTime ? toShanghaiISO(edited.endTime) : toShanghaiISO(),
+          dueDate: edited.endTime ? toShanghaiISO(edited.endTime) : toShanghaiISO(),
         pushedToMSTodo: false,
         importance: edited.importance || 'normal',
         scheduleType: 'single' as ScheduleType,
@@ -113,8 +114,8 @@ class QueueTaskModal extends BaseScheduleView<QueueTaskModalProps, QueueTaskStat
           <Input label="标题" name="name" value={edited.name || ''} onChange={this.handleInputChange} required />
           <Textarea label="描述" name="description" value={edited.description || ''} onChange={this.handleInputChange} />
           <div className="time-inputs">
-            <Input label="开始时间" name="startTime" type="datetime-local" value={edited.startTime ? format(parseISO(edited.startTime), "yyyy-MM-dd'T'HH:mm") : ''} onChange={(e)=>this.setState((prev:any)=>({ edited: {...prev.edited, startTime: e.target.value ? new Date(e.target.value).toISOString() : ''} }))} />
-            <Input label="结束时间" name="endTime" type="datetime-local" value={edited.endTime ? format(parseISO(edited.endTime), "yyyy-MM-dd'T'HH:mm") : ''} onChange={(e)=>this.setState((prev:any)=>({ edited: {...prev.edited, endTime: e.target.value ? new Date(e.target.value).toISOString() : ''} }))} />
+            <Input label="开始时间" name="startTime" type="datetime-local" value={edited.startTime ? format(parseISO(edited.startTime), "yyyy-MM-dd'T'HH:mm") : ''} onChange={(e)=>this.setState((prev:any)=>({ edited: {...prev.edited, startTime: e.target.value ? toShanghaiISO(new Date(e.target.value)) : ''} }))} />
+            <Input label="结束时间" name="endTime" type="datetime-local" value={edited.endTime ? format(parseISO(edited.endTime), "yyyy-MM-dd'T'HH:mm") : ''} onChange={(e)=>this.setState((prev:any)=>({ edited: {...prev.edited, endTime: e.target.value ? toShanghaiISO(new Date(e.target.value)) : ''} }))} />
           </div>
           <Input label="地点" name="location" value={edited.location || ''} onChange={this.handleInputChange} />
         </div>

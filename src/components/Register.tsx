@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { register, setToken } from '../services/api';
+import { register, setToken, authEvents } from '../services/api';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
@@ -37,6 +37,7 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess }) => {
     try {
       const response = await register({ name, email, password });
       setToken(response.token);
+      try { authEvents.dispatchEvent(new Event('login')); } catch (_) {}
       onRegisterSuccess();
     } catch (err: any) {
       setError(err.message || '注册失败，请稍后重试');

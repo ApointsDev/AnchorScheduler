@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { login, setToken } from '../services/api';
+import { login, setToken, authEvents } from '../services/api';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
@@ -24,6 +24,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     try {
       const response = await login({ email, password });
       setToken(response.token);
+      // notify global listeners that login happened so contexts can refresh
+      try { authEvents.dispatchEvent(new Event('login')); } catch (_) {}
       onLoginSuccess();
     } catch (err: any) {
       setError(err.message || '登录失败，请检查邮箱和密码');

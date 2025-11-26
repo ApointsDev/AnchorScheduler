@@ -1,5 +1,6 @@
 import React from 'react';
 import { format, parseISO } from 'date-fns';
+import { toShanghaiISO } from '../../utils/time';
 import { updateTask, deleteTask, type Task, ScheduleConflictError } from '../../services/api';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -69,7 +70,7 @@ class TaskDetailModal extends BaseScheduleView<TaskDetailModalProps, TaskDetailS
     if (!task) return;
     const originalDate = parseISO(task.startTime);
     const dateStr = format(originalDate, 'yyyy-MM-dd');
-    const newDateTime = new Date(`${dateStr}T${value}`).toISOString();
+    const newDateTime = toShanghaiISO(new Date(`${dateStr}T${value}`));
     this.setState(prev => ({ editedTask: { ...prev.editedTask, [name]: newDateTime } }));
   };
 
