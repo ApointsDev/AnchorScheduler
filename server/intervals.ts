@@ -4,6 +4,8 @@ import { toShanghaiISO } from './Utils/time.js';
 import { v4 as uuidv4 } from 'uuid';
 import { Options, PythonShell } from 'python-shell';
 import { ExchangeClient } from './Services/exchangeClient';
+import { ImapClient } from './Services/imapClient';
+import { LLMApi } from './Services/LLMApi';
 import { dbService } from './Services/dbService';
 import type { ExchangeConfig, ScheduleType } from './Services/types';
 import { ScheduleConflictError, findConflictingTasks } from './Services/scheduleConflict';
@@ -66,18 +68,36 @@ export function startIntervals(getUsers: () => IterableIterator<User>): Interval
                 }
             }
 
-            if (user.JWTtoken && user.XJTLUPassword && !user.emsClient) {
+            // 优先使用 OAuth Token，如果没有则退回到 Basic Auth (XJTLUPassword)
+            // 但用户要求分开设置，所以这里应该严格区分
+            // 如果 ExchangeAccessToken 存在，优先使用
+            const useOAuth = !!(user.ExchangeBinded && user.ExchangeAccessToken);
+            const useBasic = !!(user.XJTLUPassword && user.XJTLUaccount); // Legacy or specific ebridge
+
+            if ((useOAuth || useBasic) && !user.emsClient && (user.mailReadingSpan > 0 || user.ExchangeBinded)) { // Only init if mail reading is enabled or explicitly bound
                 const exchangeConfig = {
                     exchangeUrl: process.env.EXCHANGE_URL || "https://mail.xjtlu.edu.cn/EWS/Exchange.asmx",
-                    username: user.email.split('@')[0],
-                    password: user.XJTLUPassword,
+                    username: user.email.split('@')[0], // Fallback username
+                    password: user.XJTLUPassword || "", // Fallback password
                     domain: process.env.EXCHANGE_DOMAIN || "xjtlu.edu.cn",
+                    scope: process.env.EXCHANGE_SCOPE,
                     openaiApiKey: process.env.OPENAI_API_KEY || "",
                     openaiModel: process.env.OPENAI_MODEL || 'deepseek-chat',
                     MStoken: user.MStoken,
                 } as ExchangeConfig;
 
-                logger.info(`Lunching ExchangeClient for user ${user.id}, with ${JSON.stringify(exchangeConfig)}`);
+                if (useOAuth) {
+                     exchangeConfig.oauthToken = user.ExchangeAccessToken;
+                     exchangeConfig.refreshToken = user.ExchangeRefreshToken;
+                     exchangeConfig.clientId = process.env.EXCHANGE_CLIENT_ID;
+                     exchangeConfig.clientSecret = process.env.EXCHANGE_CLIENT_SECRET;
+                     exchangeConfig.tokenUrl = process.env.EXCHANGE_TOKEN_URL || "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+                     logger.info(`Using OAuth for Exchange User ${user.id}`);
+                } else {
+                     logger.info(`Using Basic Auth for Exchange User ${user.id} (Deprecated flow)`);
+                }
+
+                logger.info(`Launching ExchangeClient for user ${user.id}`);
 
                 const emailClient = new ExchangeClient(exchangeConfig, user);
                 try {
@@ -133,6 +153,80 @@ export function startIntervals(getUsers: () => IterableIterator<User>): Interval
                 }
 
                 user.emsClient = emailClient;
+            }
+
+            const useSmtp = !!(user.SmtpBinded && user.SmtpEmail && user.SmtpPassword && user.SmtpHost && user.SmtpPort);
+
+            if (useSmtp && !user.imapClient && user.mailReadingSpan > 0) {
+                const imapConfig = {
+                    host: user.SmtpHost!,
+                    port: user.SmtpPort!,
+                    tls: user.SmtpTls !== false,
+                    username: user.SmtpEmail!,
+                    password: user.SmtpPassword!,
+                };
+
+                logger.info(`Launching ImapClient for user ${user.id} with IDLE push`);
+                const imapClient = new ImapClient(imapConfig);
+                user.imapClient = imapClient;
+
+                imapClient.startIdle(async (fullEmail) => {
+                    logger.info(`IMAP IDLE 收到新邮件: ${fullEmail.subject}, 交由 LLM 处理`);
+                    const currentUser = user;
+                    if (currentUser.emsClient) {
+                        try {
+                            await currentUser.emsClient.autoProcessNewEmail(fullEmail);
+                        } catch (err: any) {
+                            logger.error(`IDLE 邮件 LLM 处理失败: ${err.message || '未知错误'}`);
+                        }
+                    } else {
+                        try {
+                            const llmApi = new LLMApi(
+                                process.env.OPENAI_API_KEY || '',
+                                process.env.OPENAI_MODEL || 'deepseek-chat'
+                            );
+                            const llmResponse = await llmApi.processEmail(fullEmail);
+                            if (llmResponse?.tool_calls) {
+                                for (const toolCall of llmResponse.tool_calls) {
+                                    const funcName = (toolCall as any)?.function?.name;
+                                    const funcArgs = (toolCall as any)?.function?.arguments;
+                                    if (funcName === 'add_schedule' && funcArgs) {
+                                        let toolArgs: any;
+                                        try {
+                                            toolArgs = typeof funcArgs === 'string' ? JSON.parse(funcArgs) : funcArgs;
+                                        } catch { toolArgs = {}; }
+                                        if (!toolArgs.name) toolArgs.name = fullEmail.subject || '未命名任务';
+                                        const payload = {
+                                            args: { ...toolArgs, description: `来自邮件: ${fullEmail.subject}` },
+                                            email: {
+                                                id: fullEmail.id,
+                                                subject: fullEmail.subject,
+                                                from: fullEmail.from,
+                                                receivedAt: fullEmail.receivedAt,
+                                                isRead: fullEmail.isRead,
+                                                body: fullEmail.body || '',
+                                                hasAttachments: !!fullEmail.hasAttachments,
+                                            },
+                                            _meta: { source: 'imap', createdAt: toShanghaiISO() }
+                                        };
+                                        await dbService.addScheduleToQueue(currentUser.id, JSON.stringify(payload));
+                                        logger.success(`IMAP 邮件已入队: ${toolArgs.name}`);
+                                    }
+                                }
+                            }
+                        } catch (err: any) {
+                            logger.error(`IMAP 邮件 LLM 处理失败: ${err.message || '未知错误'}`);
+                        }
+                    }
+                    await logUserEvent(currentUser.id, 'emailProcessed', `Processed IMAP email via IDLE: ${fullEmail.subject}`, { emailId: fullEmail.id, subject: fullEmail.subject });
+                    currentUser.mailReadingSpan = Math.max(0, currentUser.mailReadingSpan - 1);
+                    await dbService.updateUser(currentUser);
+                    logger.info(`Decremented mailReadingSpan for user ${currentUser.id}, new value: ${currentUser.mailReadingSpan}`);
+                }).catch((err) => {
+                    logger.error(`Failed to start IMAP IDLE for user ${user.id}: ${err.message || '未知错误'}`);
+                });
+
+                logger.info(`IMAP IDLE listener started for user ${user.id}`);
             }
 
             if (user.mailReadingSpan > 0 && user.emsClient) {
@@ -240,6 +334,7 @@ export function startIntervals(getUsers: () => IterableIterator<User>): Interval
                         logger.info(`Executing Python script to check Ebridge connection for user ${user.id}`);
                         const options = {
                             mode: 'text',
+                            pythonPath: '/www/server/pyporject_evn/AnchorSchedule/bin/python3.12',
                             pythonOptions: ['-u'],
                             args: [user.XJTLUaccount, user.XJTLUPassword]
                         } as Options;

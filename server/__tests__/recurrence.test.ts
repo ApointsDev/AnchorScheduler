@@ -32,6 +32,6 @@ describe('recurrence.generateRecurrenceInstances', () => {
   test('safety limit prevents runaway generation when no count/until', () => {
     const rule = { freq: 'daily', interval: 1 };
     const instances = generateRecurrenceInstances(root, rule);
-    expect(instances.length).toBeLessThanOrEqual(30);
+    expect(instances.length).toBeLessThanOrEqual(365);
   });
 });

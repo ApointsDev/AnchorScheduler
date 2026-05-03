@@ -1,4 +1,4 @@
-import { getToken } from './api';
+import { getToken, customFetch } from './api';
 
 export interface LLMConfig {
   baseUrl: string;
@@ -71,13 +71,14 @@ async function serverChatCompletion(messages: ChatMessage[], tools?: any[]): Pro
     throw new Error('User not authenticated');
   }
 
+  // 直接 import customFetch
   const body: any = { messages };
   const formattedTools = formatTools(tools);
   if (formattedTools) {
     body.tools = formattedTools;
   }
 
-  const response = await fetch('/api/llm/chat', {
+  const response = await customFetch('/api/llm/chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

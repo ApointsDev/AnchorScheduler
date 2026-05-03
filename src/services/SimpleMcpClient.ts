@@ -25,7 +25,8 @@ export class SimpleMcpClient {
 
     // Connect to SSE
     // Note: We pass the token in the query string because EventSource doesn't support headers
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    const isDev = import.meta.env.VITE_DEV_MODE === 'true';
+    const baseUrl = isDev ? 'http://localhost:3000' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000');
     this.eventSource = new EventSource(`${baseUrl}/api/mcp/sse?token=${encodeURIComponent(this.token)}`);
 
     this.eventSource.onopen = () => {
@@ -44,7 +45,8 @@ export class SimpleMcpClient {
       const data = event.data; 
       // If data is relative, prepend the backend URL
       if (data.startsWith('/')) {
-          const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+          const isDev = import.meta.env.VITE_DEV_MODE === 'true';
+          const baseUrl = isDev ? 'http://localhost:3000' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000');
           this.endpoint = `${baseUrl}${data}`;
       } else {
           this.endpoint = data;

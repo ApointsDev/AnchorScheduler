@@ -4,7 +4,7 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { User, Task } from '../index';
 import { logger } from '../Utils/logger.js';
-import { toShanghaiISO } from '../Utils/time.js';
+import { toShanghaiISO, getRawWeekNumber, getAcademicYearConfig } from '../Utils/time.js';
 import { dbService } from '../Services/dbService.js';
 import { mcpTools } from '../Services/mcp.js';
 import { findConflictingTasks, ScheduleConflictError } from '../Services/scheduleConflict.js';
@@ -93,12 +93,17 @@ export function initializeApiRoutes(authenticateToken: AuthMiddleware) {
     try {
       const user = req.user as User;
       const status: any = {
-        connected: user.ebridgeBinded,
+        connected: user.ebridgeBinded, // This now reflects ebridge (timetable) specifically
         binded: !!user.XJTLUPassword,
         passwordAvailable: !!user.XJTLUPassword,
         emsClientAvailable: !!user.emsClient,
-        timetableUrl: null,
-        lastChecked: toShanghaiISO()
+        timetableUrl: user.timetableUrl || null,
+        lastChecked: toShanghaiISO(),
+        exchangeBinded: user.ExchangeBinded,
+        exchangeTokenAvailable: !!user.ExchangeAccessToken,
+        smtpBinded: user.SmtpBinded || false,
+        smtpEmail: user.SmtpEmail || null,
+        imapClientAvailable: !!user.imapClient
       };
 
       // 立即发送响应给客户端
@@ -107,6 +112,47 @@ export function initializeApiRoutes(authenticateToken: AuthMiddleware) {
     } catch (error) {
       // 如果在准备响应时出错，发送错误响应
       res.status(500).json({ error: 'Failed to check Ebridge status' });
+    }
+  });
+
+  // 解除 Exchange 绑定
+  router.post('/unbind/exchange', authenticateToken, async (req: any, res: any) => {
+    try {
+      const user = req.user as User;
+      user.ExchangeBinded = false;
+      user.ExchangeAccessToken = undefined;
+      user.ExchangeRefreshToken = undefined;
+      user.ExchangeTokenExpiresAt = undefined;
+      
+      await dbService.updateUser(user);
+      // userCache is updated by reference if in-memory, but dbService.updateUser doesn't update cache automatically in all implementations unless we do it explicitly or if cache holds the same object. 
+      // In current impl, userCache holds the object reference, so good.
+      
+      res.status(200).json({ message: 'Exchange unbinded successfully' });
+    } catch (error) {
+      logger.error('Failed to unbind Exchange:', error);
+      res.status(500).json({ error: 'Failed to unbind Exchange' });
+    }
+  });
+
+  router.post('/unbind/smtp', authenticateToken, async (req: any, res: any) => {
+    try {
+      const user = req.user as User;
+      user.SmtpBinded = false;
+      user.SmtpEmail = undefined;
+      user.SmtpPassword = undefined;
+      user.SmtpHost = undefined;
+      user.SmtpPort = undefined;
+      user.SmtpTls = undefined;
+      if (user.imapClient) {
+        await user.imapClient.close();
+        user.imapClient = undefined;
+      }
+      await dbService.updateUser(user);
+      res.status(200).json({ message: 'SMTP unbinded successfully' });
+    } catch (error) {
+      logger.error('Failed to unbind SMTP:', error);
+      res.status(500).json({ error: 'Failed to unbind SMTP' });
     }
   });
 
@@ -437,22 +483,8 @@ export function initializeApiRoutes(authenticateToken: AuthMiddleware) {
     try {
       const user = req.user as User;
       // 计算原始周次（不含任何偏移）
-      const academicWeekOffset = parseInt(process.env.ACADEMIC_WEEK_OFFSET || '0', 10) || 0;
-      const academicYearStartMonth = parseInt(process.env.ACADEMIC_YEAR_START_MONTH || '9', 10) || 9;
-      const academicYearStartDay = parseInt(process.env.ACADEMIC_YEAR_START_DAY || '1', 10) || 1;
-
-      const currentDate = new Date();
-      const year = currentDate.getFullYear();
-      let academicYearStart: Date;
-      if (currentDate.getMonth() >= academicYearStartMonth - 1) {
-        academicYearStart = new Date(year, academicYearStartMonth - 1, academicYearStartDay);
-      } else {
-        academicYearStart = new Date(year - 1, academicYearStartMonth - 1, academicYearStartDay);
-      }
-
-      const timeDiff = currentDate.getTime() - academicYearStart.getTime();
-      const dayDiff = Math.floor(timeDiff / (1000 * 3600 * 24));
-      const rawWeekNumber = Math.ceil((dayDiff + 1) / 7);
+      const { weekOffset: academicWeekOffset } = getAcademicYearConfig();
+      const rawWeekNumber = getRawWeekNumber();
 
       const globalWeekOffset = academicWeekOffset;
       const userWeekOffset = user && typeof user.weekOffset === 'number' ? user.weekOffset : 0;
@@ -472,21 +504,8 @@ export function initializeApiRoutes(authenticateToken: AuthMiddleware) {
       const user = req.user as User;
       const { currentWeek, userWeekOffset } = req.body || {};
 
-      const academicWeekOffset = parseInt(process.env.ACADEMIC_WEEK_OFFSET || '0', 10) || 0;
-      const academicYearStartMonth = parseInt(process.env.ACADEMIC_YEAR_START_MONTH || '9', 10) || 9;
-      const academicYearStartDay = parseInt(process.env.ACADEMIC_YEAR_START_DAY || '1', 10) || 1;
-
-      const currentDate = new Date();
-      const year = currentDate.getFullYear();
-      let academicYearStart: Date;
-      if (currentDate.getMonth() >= academicYearStartMonth - 1) {
-        academicYearStart = new Date(year, academicYearStartMonth - 1, academicYearStartDay);
-      } else {
-        academicYearStart = new Date(year - 1, academicYearStartMonth - 1, academicYearStartDay);
-      }
-      const timeDiff = currentDate.getTime() - academicYearStart.getTime();
-      const dayDiff = Math.floor(timeDiff / (1000 * 3600 * 24));
-      const rawWeekNumber = Math.ceil((dayDiff + 1) / 7);
+      const { weekOffset: academicWeekOffset } = getAcademicYearConfig();
+      const rawWeekNumber = getRawWeekNumber();
 
       let newUserOffset = typeof userWeekOffset === 'number' ? userWeekOffset : undefined;
       if (typeof currentWeek === 'number') {

@@ -160,23 +160,7 @@
   box-shadow: 0 0 0 2px var(--color-timeline-dot-overdue-shadow);
 }
 
-.task-card {
-  background: var(--color-neutral-100);
-  padding: 15px;
-  border-radius: 8px;
-  border-left: 4px solid transparent;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.task-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-}
-
-.status-active .task-card { border-left-color: var(--color-timeline-dot-active); background: var(--color-task-card-active-bg); }
-.status-completed .task-card { border-left-color: var(--color-timeline-dot-completed); opacity: 0.7; }
-.status-overdue .task-card { border-left-color: var(--color-timeline-dot-overdue); }
-.status-upcoming .task-card { border-left-color: var(--color-task-card-upcoming-border); }
+/* .task-card styles defined later with full layout (see below) */
 
 .task-header {
   display: flex;
@@ -245,8 +229,7 @@
 .task-header .icon-completed,
 .task-header .icon-pending {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  /* keep icon intrinsic size (do not force width/height) so callers control size */
 }
 
 .task-desc {
@@ -256,17 +239,40 @@
   line-height: 1.4;
 }
 
+.task-card {
+  background: var(--color-neutral-100);
+  padding: 15px;
+  border-radius: 8px;
+  border-left: 4px solid transparent;
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.status-active .task-card { border-left-color: var(--color-timeline-dot-active); background: var(--color-task-card-active-bg); }
+.status-completed .task-card { border-left-color: var(--color-timeline-dot-completed); opacity: 0.7; }
+.status-overdue .task-card { border-left-color: var(--color-timeline-dot-overdue); }
+.status-upcoming .task-card { border-left-color: var(--color-task-card-upcoming-border); }
+
+
 .task-meta {
   display: flex;
   gap: 15px;
   font-size: 0.85rem;
   color: #888;
+  flex-wrap: wrap; /* allow meta to wrap instead of being squeezed */
 }
 
 .meta-item {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0; /* allow flex items to shrink properly when needed */
 }
 
 /* Calendar View (All Schedule) */

@@ -69,13 +69,19 @@ export interface MCPTool {
 }
 
 export interface ExchangeConfig {
-  MStoken?: string;
+  MStoken?: string; // Access Token
+  oauthToken?: string; // Initial Access Token
+  refreshToken?: string;
+  clientId?: string;
+  clientSecret?: string;
+  scope?: string;
   exchangeUrl: string;
   username: string;
   password: string;
   domain?: string;
   openaiApiKey?: string;
   openaiModel?: string;
+  tokenUrl?: string;
 }
 
 // Recurrence rule shape used by recurrence generator and APIs

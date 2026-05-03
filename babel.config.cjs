@@ -9,14 +9,13 @@ module.exports = {
     [
       "module-resolver",
       {
-        extensions: [".js", ".ts"],
+        extensions: [".js", ".ts", ".json"],
         resolvePath: (sourcePath, currentFile, opts) => {
-          // 如果是相对路径导入且不是node_modules
-          if (sourcePath.startsWith('./') && !sourcePath.includes('node_modules')) {
-            // 检查是否已经有扩展名
-            if (!sourcePath.endsWith('.js') && !sourcePath.endsWith('.ts')) {
-              return sourcePath + '.js';
-            }
+          // Add .js extension for relative imports if missing
+          if ((sourcePath.startsWith('./') || sourcePath.startsWith('../')) && !sourcePath.includes('node_modules')) {
+             if (!sourcePath.endsWith('.js') && !sourcePath.endsWith('.ts')) {
+                return sourcePath + '.js';
+             }
           }
           return sourcePath;
         }

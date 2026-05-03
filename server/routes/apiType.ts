@@ -12,12 +12,15 @@ export interface StatusMicrosoftTodoResponse {
 }
 
 export interface StatusEbridgeResponse {
-  connected: boolean;
+  connected: boolean; // ebridge connected (for timetable)
   binded: boolean;
   passwordAvailable: boolean;
   emsClientAvailable: boolean;
   timetableUrl: string | null;
   lastChecked: string;
+  // Exchange specific status
+  exchangeBinded: boolean;
+  exchangeTokenAvailable: boolean;
 }
 
 export interface GenericErrorResponse {

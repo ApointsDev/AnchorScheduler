@@ -42,8 +42,15 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
     <Card className={`task-card ${getStatusColor(status)} ${className}`} onClick={onClick}>
       <div className="task-header">
         <h3>{name}</h3>
+        {rightActions && (
+          <div className="task-actions" onClick={(e) => e.stopPropagation()}>
+            {rightActions}
+          </div>
+        )}
       </div>
+
       {description && <p className="task-desc">{description}</p>}
+
       <div className="task-meta">
         {location && (
           <span className="meta-item">
@@ -54,11 +61,8 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
           <Clock size={14} /> {format(parseISO(startTime), 'HH:mm')} - {format(parseISO(endTime), 'HH:mm')}
         </span>
       </div>
-      {rightActions && (
-        <div className="task-footer">
-          {rightActions}
-        </div>
-      )}
+
+      {/* Remove footer placement; actions are now in header to the right of title */}
     </Card>
   );
 };

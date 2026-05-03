@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { login, setToken, authEvents } from '../services/api';
+import { login, setToken, authEvents, startCafAuth } from '../services/api';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
@@ -15,6 +15,36 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cafLoading, setCafLoading] = useState(false);
+  const callbackHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (callbackHandledRef.current) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const callbackToken = params.get('token');
+    const cafError = params.get('caf_error');
+
+    if (cafError) {
+      setError(cafError);
+      params.delete('caf_error');
+      const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+      window.history.replaceState({}, '', nextUrl);
+      callbackHandledRef.current = true;
+      return;
+    }
+
+    if (callbackToken) {
+      setToken(callbackToken);
+      try { authEvents.dispatchEvent(new Event('login')); } catch (_) {}
+      params.delete('token');
+      params.delete('from');
+      const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+      window.history.replaceState({}, '', nextUrl);
+      callbackHandledRef.current = true;
+      onLoginSuccess();
+    }
+  }, [onLoginSuccess]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +62,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCafLogin = () => {
+    setCafLoading(true);
+    startCafAuth();
   };
 
   return (
@@ -63,6 +98,15 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             />
             <Button type="submit" className="auth-button-full" disabled={loading} style={{ width: '100%', marginTop: '10px' }}>
               {loading ? '登录中...' : '登录'}
+            </Button>
+            <Button
+              type="button"
+              className="auth-button-full"
+              disabled={cafLoading}
+              onClick={handleCafLogin}
+              style={{ width: '100%', marginTop: '10px' }}
+            >
+              {cafLoading ? '跳转 CAF 中...' : '使用 CAF 登录'}
             </Button>
           </form>
           <div className="switch-auth-link">

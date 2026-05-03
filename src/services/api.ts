@@ -1,11 +1,22 @@
 // API 服务文件，处理与后端的所有通信
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+// 优先使用 VITE_API_BASE_URL（构建时注入），若未设置则使用当前页面 origin
+const isDev = import.meta.env.VITE_DEV_MODE === 'true';
+const API_BASE_URL = isDev ? 'http://localhost:3000' : (import.meta.env.VITE_API_BASE_URL || window.location.origin);
 
 export const authEvents = new EventTarget();
 
-const customFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-  const response = await fetch(input, init);
+// 将相对的 /api 路径解析为完整的后端地址，避免在前端与后端不同域时发出错误的相对请求
+export function resolveApiUrl(input: string): string {
+  if (input.startsWith(`${API_BASE_URL}`) || input.startsWith(`${API_BASE_URL}`)) {
+    return input;
+  }
+  return `${API_BASE_URL}${input}`;
+}
+
+export const customFetch = async (input: string, init?: RequestInit): Promise<Response> => {
+  const target = resolveApiUrl(input);
+  const response = await fetch(target, init);
   if (response.status === 403) {
     authEvents.dispatchEvent(new Event('unauthorized'));
   }
@@ -82,6 +93,11 @@ export const login = async (data: LoginData): Promise<{ token: string }> => {
   return result;
 };
 
+// 启动 CAF OAuth 流程
+export const startCafAuth = (): void => {
+  window.location.href = `${API_BASE_URL}/auth/caf`;
+};
+
 // 启动Microsoft OAuth流程
 export const startMicrosoftAuth = (): void => {
   const token = getToken();
@@ -90,6 +106,96 @@ export const startMicrosoftAuth = (): void => {
   } else {
     window.location.href = `${API_BASE_URL}/auth`;
   }
+};
+
+// 启动 Exchange OAuth 流程 (XJTLU UIM)
+export const startExchangeAuth = (loginHint?: string): Promise<void> => {
+  const token = getToken();
+  const width = 500;
+  const height = 600;
+  // 计算居中位置
+  const left = window.screen.width / 2 - width / 2;
+  const top = window.screen.height / 2 - height / 2;
+  
+  let url = `${API_BASE_URL}/auth/exchange?jwt=${token}`;
+  if (loginHint) {
+    url += `&login_hint=${encodeURIComponent(loginHint)}`;
+  }
+
+  const authWindow = window.open(
+    url, 
+    'ExchangeAuth', 
+    `width=${width},height=${height},left=${left},top=${top}`
+  );
+
+  return new Promise((resolve) => {
+    const timer = setInterval(() => {
+      if (authWindow?.closed) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 1000);
+
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'EXCHANGE_BOUND') {
+        clearInterval(timer);
+        authWindow?.close();
+        window.removeEventListener('message', handler);
+        resolve();
+      }
+    };
+    window.addEventListener('message', handler);
+  });
+};
+
+export const unbindExchange = async (): Promise<void> => {
+    const response = await customFetch('/api/unbind/exchange', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${getToken()}`,
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('解绑 Exchange 失败');
+    }
+};
+
+export interface SmtpConfig {
+  smtpEmail: string;
+  smtpPassword: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpTls: boolean;
+}
+
+export const bindSmtp = async (config: SmtpConfig): Promise<void> => {
+    const response = await customFetch('/auth/smtp/bind', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify(config),
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'SMTP 绑定失败');
+    }
+};
+
+export const unbindSmtp = async (): Promise<void> => {
+    const response = await customFetch('/api/unbind/smtp', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${getToken()}`,
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('解绑 SMTP 失败');
+    }
 };
 
 // 更新Ebridge密码
@@ -149,6 +255,13 @@ export interface EbridgeStatus {
   passwordAvailable: boolean;
   emsClientAvailable: boolean;
   lastChecked: string;
+  // Exchange specific status
+  exchangeBinded?: boolean;
+  exchangeTokenAvailable?: boolean;
+  // SMTP specific status
+  smtpBinded?: boolean;
+  smtpEmail?: string | null;
+  imapClientAvailable?: boolean;
 }
 
 export const getEbridgeStatus = async (): Promise<EbridgeStatus> => {
@@ -243,10 +356,8 @@ export interface TasksResponse {
 
 export interface MicrosoftTodoStatus {
   connected: boolean;
-}
-
-export interface EbridgeStatus {
-  connected: boolean;
+  binded: boolean;
+  tokenAvailable: boolean;
 }
 
 export class ScheduleConflictError extends Error {

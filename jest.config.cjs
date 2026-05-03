@@ -5,5 +5,9 @@ module.exports = {
     '^.+\\.ts$': ['ts-jest', { useESM: true }]
   },
   moduleFileExtensions: ['ts','js','json'],
-  extensionsToTreatAsEsm: ['.ts']
+  extensionsToTreatAsEsm: ['.ts'],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
+  modulePathIgnorePatterns: ["<rootDir>/server/dist/"]
 };

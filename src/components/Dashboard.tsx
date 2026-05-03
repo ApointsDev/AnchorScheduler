@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   startMicrosoftAuth, 
+  startExchangeAuth,
+  unbindExchange,
+  bindSmtp,
+  unbindSmtp,
   removeToken, 
   getToken,
   updateEbridgePassword,
@@ -14,7 +18,6 @@ import {
 } from '../services/api';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
 import { Button } from './ui/Button';
-import { Badge } from './ui/Badge';
 import { Input } from './ui/Input';
 import { Modal } from './ui/Modal';
 import AllSchedule from './Schedule/AllSchedule';
@@ -24,9 +27,10 @@ import ScheduleQueue from './Schedule/ScheduleQueue';
 import LogViewer from './Logs/LogViewer';
 import AIChat from './AIChat/AIChat';
 import { useWeek } from '../context/WeekContext';
-import { LayoutDashboard, Calendar, ListTodo, FileText, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Menu, X, Search, RefreshCw, Copy, Check, Trash2, Download, Link } from 'lucide-react';
+import { LayoutDashboard, Calendar, ListTodo, FileText, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Menu, X, Search, RefreshCw, Copy, Check, Trash2, Download } from 'lucide-react';
 import { ToggleButton } from './ui/ToggleButton';
 import '../styles/Dashboard.css';
+import logo from '../assets/logo.svg';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -73,6 +77,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
   const [weekLoading, setWeekLoading] = useState(false);
   const [weekError, setWeekError] = useState('');
   const [showWeekModal, setShowWeekModal] = useState(false);
+  const [showExchangeConnectModal, setShowExchangeConnectModal] = useState(false);
+  const [exchangeEmail, setExchangeEmail] = useState(localStorage.getItem('user_XJTLUaccount') || '');
 
   useEffect(() => {
     const handleResize = () => {
@@ -136,6 +142,93 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
 
   const handleConnectMicrosoft = () => {
     startMicrosoftAuth();
+  };
+
+  const handleConnectExchange = async () => {
+    // 允许用户输入/确认学校邮箱
+    setExchangeEmail(XJTLUaccount || '');
+    setShowExchangeConnectModal(true);
+  };
+
+  const executeConnectExchange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setShowExchangeConnectModal(false);
+    setLoading(true);
+    setStatusError('');
+    try {
+        await startExchangeAuth(exchangeEmail);
+        // 如果绑定成功，通常会刷新整个页面或通过消息通知。
+        // 这里只是简单的更新状态。实际的账户信息更新依赖于后端的绑定逻辑。
+        if (exchangeEmail) {
+            setXJTLUaccount(exchangeEmail);
+            localStorage.setItem('user_XJTLUaccount', exchangeEmail);
+        }
+        // 为了确保状态最新，延迟一点再刷新
+        setTimeout(() => handleRefreshStatus(), 1000);
+    } catch (err: any) {
+        setStatusError('Exchange 绑定失败或被取消');
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleUnbindExchange = async () => {
+      if (!window.confirm('确定要解除 Exchange 邮箱绑定吗？这将停止邮件智能分析和日历同步功能。')) return;
+      setLoading(true);
+      try {
+          await unbindExchange();
+          await handleRefreshStatus();
+      } catch (err: any) {
+          setStatusError(err.message || '解绑失败');
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const [showSmtpConnectModal, setShowSmtpConnectModal] = useState(false);
+  const [smtpEmail, setSmtpEmail] = useState('');
+  const [smtpPassword, setSmtpPassword] = useState('');
+  const [smtpHost, setSmtpHost] = useState('');
+  const [smtpPort, setSmtpPort] = useState(993);
+  const [smtpTls, setSmtpTls] = useState(true);
+
+  const handleConnectSmtp = () => {
+    setSmtpEmail(ebridgeStatus?.smtpEmail || '');
+    setShowSmtpConnectModal(true);
+  };
+
+  const executeConnectSmtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setShowSmtpConnectModal(false);
+    setLoading(true);
+    setStatusError('');
+    try {
+        await bindSmtp({
+            smtpEmail,
+            smtpPassword,
+            smtpHost,
+            smtpPort,
+            smtpTls
+        });
+        setTimeout(() => handleRefreshStatus(), 1000);
+    } catch (err: any) {
+        setStatusError('SMTP 绑定失败: ' + (err.message || '未知错误'));
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleUnbindSmtp = async () => {
+      if (!window.confirm('确定要解除 SMTP 邮箱绑定吗？这将停止 IMAP 邮件分析功能。')) return;
+      setLoading(true);
+      try {
+          await unbindSmtp();
+          await handleRefreshStatus();
+      } catch (err: any) {
+          setStatusError(err.message || '解绑失败');
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -257,121 +350,161 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
     }
 
     return (
-      <Card className="connection-status-section">
+      <Card className="connection-panel">
         <CardHeader>
-          <CardTitle>连接状态与控制</CardTitle>
+          <CardTitle>服务连接状态</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="control-section" style={{ marginTop: 0, borderTop: 'none', paddingTop: 0 }}>
-            <h4 className="section-title">服务连接</h4>
-            <div className="action-grid">
-              {/* Microsoft To Do Card */}
-              <div className="action-card">
-                <div className="action-icon-wrapper microsoft">
-                  <ListTodo size={20} />
-                </div>
-                <div className="action-info">
-                  <span className="action-title">Microsoft To Do</span>
-                  <span className="action-desc">
-                    {msTodoStatus?.connected ? '已连接到 Microsoft' : '未连接，点击连接'}
-                  </span>
-                </div>
-                {msTodoStatus?.connected ? (
-                  <Badge variant="success">已连接</Badge>
-                ) : (
-                  <Button 
-                    onClick={handleConnectMicrosoft} 
-                    variant="primary"
-                    size="sm"
-                    className="action-btn"
-                  >
-                    连接
-                  </Button>
+          <div className="conn-table">
+            <div className="conn-row">
+              <div className="conn-indicator">
+                <span className={`conn-dot ${msTodoStatus?.connected ? 'online' : 'offline'}`} />
+              </div>
+              <div className="conn-body">
+                <span className="conn-label">Microsoft To Do</span>
+                <span className="conn-meta">任务同步与管理</span>
+              </div>
+              <div className="conn-state">
+                <span className={`conn-tag ${msTodoStatus?.connected ? 'online' : ''}`}>
+                  {msTodoStatus?.connected ? '已连接' : '未连接'}
+                </span>
+              </div>
+              <div className="conn-actions">
+                {!msTodoStatus?.connected && (
+                  <Button onClick={handleConnectMicrosoft} variant="primary" size="sm">连接</Button>
                 )}
               </div>
+            </div>
 
-              {/* Ebridge Card */}
-              <div className="action-card">
-                <div className="action-icon-wrapper ebridge">
-                  <Link size={20} />
-                </div>
-                <div className="action-info">
-                  <span className="action-title">Ebridge 教务系统</span>
-                  <span className="action-desc">
-                    {ebridgeStatus?.connected ? '已连接到教务系统' : '未连接，点击连接'}
-                  </span>
-                </div>
-                {ebridgeStatus?.connected ? (
-                  <Badge variant="success">已连接</Badge>
+            <div className="conn-row">
+              <div className="conn-indicator">
+                <span className={`conn-dot ${ebridgeStatus?.exchangeBinded ? 'online' : 'offline'}`} />
+              </div>
+              <div className="conn-body">
+                <span className="conn-label">Exchange 邮箱</span>
+                <span className="conn-meta">
+                  {ebridgeStatus?.exchangeBinded
+                    ? ebridgeStatus?.exchangeEmail || '已绑定'
+                    : 'XJTLU 学校邮箱'}
+                </span>
+              </div>
+              <div className="conn-state">
+                <span className={`conn-tag ${ebridgeStatus?.exchangeBinded ? 'online' : ''}`}>
+                  {ebridgeStatus?.exchangeBinded ? '已绑定' : '未绑定'}
+                </span>
+              </div>
+              <div className="conn-actions">
+                {ebridgeStatus?.exchangeBinded ? (
+                  <Button onClick={handleUnbindExchange} variant="ghost" size="sm" className="conn-unbind">解绑</Button>
                 ) : (
-                  <Button 
-                    onClick={() => setShowEbridgeConnectModal(true)} 
-                    variant="primary"
-                    size="sm"
-                    className="action-btn"
-                  >
-                    连接
-                  </Button>
+                  <Button onClick={handleConnectExchange} variant="primary" size="sm">绑定</Button>
+                )}
+              </div>
+            </div>
+
+            <div className="conn-row">
+              <div className="conn-indicator">
+                <span className={`conn-dot ${ebridgeStatus?.smtpBinded ? 'online' : 'offline'}`} />
+              </div>
+              <div className="conn-body">
+                <span className="conn-label">SMTP 邮箱</span>
+                <span className="conn-meta">
+                  {ebridgeStatus?.smtpBinded
+                    ? ebridgeStatus.smtpEmail || '已绑定'
+                    : 'IMAP/SMTP 协议'}
+                </span>
+              </div>
+              <div className="conn-state">
+                <span className={`conn-tag ${ebridgeStatus?.smtpBinded ? 'online' : ''}`}>
+                  {ebridgeStatus?.smtpBinded ? '已绑定' : '未绑定'}
+                </span>
+              </div>
+              <div className="conn-actions">
+                {ebridgeStatus?.smtpBinded ? (
+                  <Button onClick={handleUnbindSmtp} variant="ghost" size="sm" className="conn-unbind">解绑</Button>
+                ) : (
+                  <Button onClick={handleConnectSmtp} variant="primary" size="sm">绑定</Button>
+                )}
+              </div>
+            </div>
+
+            <div className="conn-row">
+              <div className="conn-indicator">
+                <span className={`conn-dot ${ebridgeStatus?.connected ? 'online' : 'offline'}`} />
+              </div>
+              <div className="conn-body">
+                <span className="conn-label">Ebridge 教务系统</span>
+                <span className="conn-meta">课程与考试信息</span>
+              </div>
+              <div className="conn-state">
+                <span className={`conn-tag ${ebridgeStatus?.connected ? 'online' : ''}`}>
+                  {ebridgeStatus?.connected ? '已连接' : '未连接'}
+                </span>
+              </div>
+              <div className="conn-actions">
+                {!ebridgeStatus?.connected && (
+                  <Button onClick={() => setShowEbridgeConnectModal(true)} variant="primary" size="sm">连接</Button>
                 )}
               </div>
             </div>
           </div>
-          
-          {ebridgeStatus?.connected && (
-            <div className="control-section">
-              <h4 className="section-title">课表管理</h4>
-              <div className="action-grid">
-                <div className="action-card">
-                  <div className="action-icon-wrapper sync">
-                    <Download size={20} />
-                  </div>
-                  <div className="action-info">
-                    <span className="action-title">同步课表</span>
-                    <span className="action-desc">从 Ebridge 获取最新课程</span>
-                  </div>
-                  <Button 
-                    onClick={handleSyncTimetable} 
-                    disabled={syncLoading}
-                    variant="secondary"
-                    size="sm"
-                    className="action-btn"
-                  >
-                    {syncLoading ? '同步中...' : '立即同步'}
-                  </Button>
-                </div>
 
-                <div className="action-card danger">
-                  <div className="action-icon-wrapper delete">
-                    <Trash2 size={20} />
+          {ebridgeStatus?.connected && (
+            <>
+              <div className="conn-divider" />
+              <div className="conn-table">
+                <div className="conn-row">
+                  <div className="conn-indicator">
+                    <Download size={16} className="conn-icon" />
                   </div>
-                  <div className="action-info">
-                    <span className="action-title">清空课表</span>
-                    <span className="action-desc">删除所有导入的课程日程</span>
+                  <div className="conn-body">
+                    <span className="conn-label">同步课表</span>
+                    <span className="conn-meta">从教务系统获取最新课程</span>
                   </div>
-                  <Button 
-                    onClick={handleDeleteTimetable} 
-                    disabled={syncLoading}
-                    variant="danger"
-                    size="sm"
-                    className="action-btn"
-                  >
-                    删除全部
-                  </Button>
+                  <div className="conn-actions">
+                    <Button
+                      onClick={handleSyncTimetable}
+                      disabled={syncLoading}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      {syncLoading ? '同步中...' : '立即同步'}
+                    </Button>
+                  </div>
+                </div>
+                <div className="conn-row">
+                  <div className="conn-indicator">
+                    <Trash2 size={16} className="conn-icon conn-icon-danger" />
+                  </div>
+                  <div className="conn-body">
+                    <span className="conn-label">清空课表</span>
+                    <span className="conn-meta">删除所有导入的课程日程</span>
+                  </div>
+                  <div className="conn-actions">
+                    <Button
+                      onClick={handleDeleteTimetable}
+                      disabled={syncLoading}
+                      variant="danger"
+                      size="sm"
+                    >
+                      删除全部
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
 
-          <div className="global-actions">
-             <Button variant="outline" onClick={handleRefreshStatus} size="sm">
-              <RefreshCw size={14} style={{marginRight: '6px'}}/> 刷新状态
+          <div className="conn-divider" />
+          <div className="conn-toolbar">
+            <Button variant="outline" onClick={handleRefreshStatus} size="sm">
+              <RefreshCw size={14} /> <span>刷新</span>
             </Button>
-             <Button variant="outline" onClick={handleCopyToken} size="sm">
-              {tokenCopied ? <Check size={14} style={{marginRight: '6px'}}/> : <Copy size={14} style={{marginRight: '6px'}}/>}
-              {tokenCopied ? '已复制' : '复制 MCP Token'}
+            <Button variant="outline" onClick={handleCopyToken} size="sm">
+              {tokenCopied ? <Check size={14} /> : <Copy size={14} />}
+              <span>{tokenCopied ? '已复制' : '复制 Token'}</span>
             </Button>
           </div>
-          
         </CardContent>
       </Card>
     );
@@ -530,7 +663,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
       {isMobile ? (
         <header className={`mobile-header ${isMobileMenuOpen ? 'open' : ''}`}>
           <div className="mobile-header-top">
-            <h1 className="logo-text">时间锚</h1>
+            <h1 className="logo-text"><img src={logo} alt="时锚" className="app-logo"/> <span>时锚</span></h1>
             <button className="mobile-menu-toggle" onClick={toggleMobileMenu}>
               {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -550,7 +683,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
       ) : (
         <aside className="sidebar">
           <div className="sidebar-header">
-            <h1 className="logo-text">时间锚</h1>
+            <h1 className="logo-text"><img src={logo} alt="时间锚" className="app-logo"/> <span>时间锚</span></h1>
             <ToggleButton
               isToggled={isSidebarCollapsed}
               onToggle={toggleSidebar}
@@ -576,6 +709,119 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
       <main className="main-content">
         {renderMainContent()}
         
+        <Modal
+          isOpen={showExchangeConnectModal}
+          onClose={() => setShowExchangeConnectModal(false)}
+          title="连接 Exchange 邮箱"
+        >
+          <div className="exchange-connect-modal">
+            <p className="modal-description" style={{marginBottom: '15px', color: '#666', fontSize: '14px'}}>
+              请输入您的学校邮箱（例如: san.zhang23@student.xjtlu.edu.cn）。
+              <br/>
+              系统将引导您通过 XJTLU UIM 进行统一身份认证。
+              <br/>
+              <span style={{color: '#d9534f'}}>注意：必须使用学校邮箱登录 Exchange，因为 Microsoft To Do 通常使用的是个人账户。</span>
+            </p>
+            <form onSubmit={executeConnectExchange}>
+              <Input
+                label="学校邮箱"
+                type="email"
+                id="exchangeEmail"
+                value={exchangeEmail}
+                onChange={(e) => setExchangeEmail(e.target.value)}
+                required
+                placeholder="例如: san.zhang23@student.xjtlu.edu.cn"
+              />
+              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <Button type="button" variant="secondary" onClick={() => setShowExchangeConnectModal(false)}>
+                  取消
+                </Button>
+                <Button type="submit">
+                  前往认证
+                </Button>
+              </div>
+            </form>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={showSmtpConnectModal}
+          onClose={() => setShowSmtpConnectModal(false)}
+          title="连接 SMTP/IMAP 邮箱"
+        >
+          <div className="smtp-connect-modal">
+            <p className="modal-description" style={{marginBottom: '15px', color: '#666', fontSize: '14px'}}>
+              请输入您的邮箱 IMAP/SMTP 服务器信息以连接邮箱。
+              <br/>
+              常见设置:
+              <br/>• QQ邮箱: imap.qq.com / 993 / TLS
+              <br/>• 163邮箱: imap.163.com / 993 / TLS
+              <br/>• Gmail: imap.gmail.com / 993 / TLS
+              <br/>• Outlook: outlook.office365.com / 993 / TLS
+            </p>
+            <form onSubmit={executeConnectSmtp}>
+              <Input
+                label="邮箱地址"
+                type="email"
+                id="smtpEmail"
+                value={smtpEmail}
+                onChange={(e) => setSmtpEmail(e.target.value)}
+                required
+                placeholder="例如: example@qq.com"
+              />
+              <Input
+                label="邮箱密码/授权码"
+                type="password"
+                id="smtpPassword"
+                value={smtpPassword}
+                onChange={(e) => setSmtpPassword(e.target.value)}
+                required
+                placeholder="请输入邮箱密码或IMAP授权码"
+              />
+              <Input
+                label="IMAP 服务器"
+                type="text"
+                id="smtpHost"
+                value={smtpHost}
+                onChange={(e) => setSmtpHost(e.target.value)}
+                required
+                placeholder="例如: imap.qq.com"
+              />
+              <div style={{display:'flex', gap:'10px'}}>
+                <div style={{flex:1}}>
+                  <Input
+                    label="端口"
+                    type="number"
+                    id="smtpPort"
+                    value={String(smtpPort)}
+                    onChange={(e) => setSmtpPort(Number(e.target.value))}
+                    required
+                    placeholder="993"
+                  />
+                </div>
+                <div style={{flex:1, display:'flex', alignItems:'flex-end', paddingBottom:'2px'}}>
+                  <label style={{display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'14px'}}>
+                    <input
+                      type="checkbox"
+                      checked={smtpTls}
+                      onChange={(e) => setSmtpTls(e.target.checked)}
+                    />
+                    TLS 加密
+                  </label>
+                </div>
+              </div>
+              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <Button type="button" variant="secondary" onClick={() => setShowSmtpConnectModal(false)}>
+                  取消
+                </Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? '连接中...' : '确认绑定'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </Modal>
+
         <Modal
           isOpen={showUnboundModal}
           onClose={() => setShowUnboundModal(false)}

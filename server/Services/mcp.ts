@@ -27,21 +27,19 @@ export const mcpTools: MCPToolsMap = {
             limit: z.number().optional().describe("Number of emails to read (default 5)"),
         },
         execute: async (args: { limit?: number }, user: User) => {
-            if (!user.emsClient) {
-                return { content: [{ type: "text" as const, text: "Exchange client not initialized. Please wait for the background sync or check credentials." }] };
+            if (!user.emsClient && !user.imapClient) {
+                return { content: [{ type: "text" as const, text: "No email client initialized. Please bind Exchange or SMTP first and wait for the background sync." }] };
             }
             try {
-                const emails = await user.emsClient.findEmails(args.limit || 5);
-                // Fetch full content for each email to get the body
+                const client = user.emsClient || user.imapClient!;
+                const emails = await client.findEmails(args.limit || 5);
                 const fullEmails = await Promise.all(emails.map(async (e) => {
                     try {
-                        return await user.emsClient!.getEmailById(e.id);
+                        return await client.getEmailById(e.id);
                     } catch (err) {
-                        return e; // Return basic info if fetch fails
+                        return e;
                     }
                 }));
-                //删去邮件body中的html
-                
 
                 const emailSummaries = fullEmails.map(e => ({
                     subject: e.subject,

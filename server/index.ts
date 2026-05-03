@@ -1,26 +1,35 @@
 import * as msal from '@azure/msal-node';
+import dotenv from 'dotenv';
 import express from 'express';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { ExchangeClient } from './Services/exchangeClient';
+import { ImapClient } from './Services/imapClient';
 import { dbService } from './Services/dbService';
 import moment from 'moment';
 import { initializeApiRoutes } from './routes/apiRoutes';
+import { initializeAlgorithmRoutes } from './routes/algorithmRoutes';
 import { Options, PythonShell } from 'python-shell';
 import { ExchangeConfig, TimetableActivity, ScheduleType } from './Services/types';
 import { ScheduleConflictError } from './Services/scheduleConflict';
 import { initWebSocket, broadcastTaskChange, broadcastUserLog } from './Services/websocket';
 import { logUserEvent } from './Services/userLog';
 import { logger } from './Utils/logger.js';
-import { toShanghaiISO } from './Utils/time.js';
+import { toShanghaiISO, getCurrentWeekNumber } from './Utils/time.js';
 import { EmailMessageSchema, SearchFilter } from 'ews-javascript-api';
 import { startIntervals } from './intervals';
 import { initializeMcpRoutes } from './Services/mcp';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { promises as fs } from 'fs';
+import { generateKeyPairSync } from 'crypto';
+
+// Load environment variables from server/.env or root .env
+dotenv.config({ path: 'server/.env' });
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,7 +55,7 @@ app.use(cors());
 
 // Exclude MCP messages endpoint from body parsing because SSEServerTransport handles the stream directly
 app.use((req, res, next) => {
-    if (req.path === '/api/mcp/messages') {
+    if (req.path === '/api/mcp/messages' || req.path === '/ws') {
         next();
     } else {
         express.json()(req, res, next);
@@ -54,6 +63,9 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
+const isDev = process.env.VITE_DEV_MODE === 'true';
+const FRONTEND_URL = isDev ? 'http://localhost:5173' : (process.env.FRONTEND_URL || 'http://localhost:5173');
+const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 
 // 将在authenticateToken函数定义后配置API路由
 export interface Task {
@@ -73,6 +85,8 @@ export interface Task {
     importance?: 'high' | 'normal' | 'low';
     isReminderOn?: boolean;
     scheduleType?: ScheduleType;
+    estimatedDuration?: number; // 分钟，用于DDL任务
+    isFixed?: boolean; // 是否为固定时间任务
 }
 
 export interface Profile{
@@ -94,6 +108,7 @@ export interface User {
     passwordHash?: string; // only for local accounts
     JWTtoken?: string; // latest issued JWT for user (optional)
     MStoken?: string; // Microsoft access token (optional)
+    MSRefreshToken?: string; // Microsoft refresh token
     MSbinded: boolean; // 是否绑定了 Microsoft 账号
     ebridgeBinded: boolean; // 是否绑定了 ebridge 账号
     weekOffset?: number; // 用户自定义周数偏移量，叠加在全局偏移之上
@@ -102,6 +117,21 @@ export interface User {
     conflictBoundaryInclusive?: boolean; // 端点相接是否算冲突（true=算）
     isConflictScheduleAllowed?: boolean; // 是否允许冲突的日程存在
     userProfile?: Profile;
+    highEnergyPeriods?: Record<number, { startHour: number; endHour: number; score: number }[]>; // 高精力时段 (Key: 0-6 DayOfWeek)
+    ExchangeAccessToken?: string;
+    ExchangeRefreshToken?: string;
+    ExchangeTokenExpiresAt?: number;
+    ExchangeBinded?: boolean;
+    SmtpBinded?: boolean;
+    SmtpEmail?: string;
+    SmtpPassword?: string;
+    SmtpHost?: string;
+    SmtpPort?: number;
+    SmtpTls?: boolean;
+    imapClient?: ImapClient;
+    CAFSub?: string;
+    CAFAccessToken?: string;
+    CAFTokenExpiresAt?: number;
 }
 
 
@@ -138,7 +168,7 @@ async function findUserByEmail(email: string) {
     return user;
 }
 
-async function pairMsTokenToUser(userId: string, msToken: string) {
+async function pairMsTokenToUser(userId: string, msToken: string, refreshToken?: string) {
     let u = userCache.get(userId);
 
     if (!u) {
@@ -148,6 +178,9 @@ async function pairMsTokenToUser(userId: string, msToken: string) {
     }
 
     u.MStoken = msToken;
+    if (refreshToken) {
+        u.MSRefreshToken = refreshToken;
+    }
     u.MSbinded = true; // 标记为已绑定并激活
     // 新的 token 到来，标记为已绑定
 
@@ -157,18 +190,7 @@ async function pairMsTokenToUser(userId: string, msToken: string) {
     return true;
 }
 
-// 从环境变量读取学术配置
-let academicConfig: any = {
-    academicYearSettings: {
-        weekOffset: parseInt(process.env.ACADEMIC_WEEK_OFFSET || '0'),
-        academicYearStartMonth: parseInt(process.env.ACADEMIC_YEAR_START_MONTH || '9'),
-        academicYearStartDay: parseInt(process.env.ACADEMIC_YEAR_START_DAY || '1')
-    }
-};
-
-logger.info('Academic configuration loaded from environment variables');
-
-// 读取Microsoft配置
+// Microsoft configuration loaded from environment variables
 const config = {
     auth: {
         clientId: process.env.MS_CLIENT_ID || "",
@@ -189,33 +211,6 @@ if (!config.auth.clientId) {
 }
 
 logger.info('Microsoft configuration loaded from environment variables');
-
-// 获取当前学年的周次
-function getCurrentWeekNumber(): number {
-    const { weekOffset, academicYearStartMonth, academicYearStartDay } = academicConfig.academicYearSettings;
-
-    // 学年从指定月份和日期开始
-    const currentDate = new Date();
-    const year = currentDate.getFullYear();
-
-    // 确定当前学年的起始日期
-    let academicYearStart: Date;
-    if (currentDate.getMonth() >= academicYearStartMonth - 1) { // 当前月份大于等于学年开始月份
-        academicYearStart = new Date(year, academicYearStartMonth - 1, academicYearStartDay);
-    } else {
-        academicYearStart = new Date(year - 1, academicYearStartMonth - 1, academicYearStartDay);
-    }
-
-    // 计算当前日期与学年开始日期的天数差
-    const timeDiff = currentDate.getTime() - academicYearStart.getTime();
-    const dayDiff = Math.floor(timeDiff / (1000 * 3600 * 24));
-
-    // 计算周次（向上取整）并应用偏移量
-    const rawWeekNumber = Math.ceil((dayDiff + 1) / 7);
-    const adjustedWeekNumber = rawWeekNumber + weekOffset;
-
-    return Math.max(1, adjustedWeekNumber); // 确保周数至少为1
-}
 
 // 身份验证中间件
 async function authenticateToken(req: any, res: any, next: any) {
@@ -248,9 +243,536 @@ async function authenticateToken(req: any, res: any, next: any) {
     next();
 }
 
-// 配置API路由
+
+// Exchange/XJTLU OAuth Config
+const defaultAuthority = process.env.MS_AUTHORITY || "https://login.microsoftonline.com/common";
+// Ensure authority does not have trailing slash
+const authority = defaultAuthority.endsWith('/') ? defaultAuthority.slice(0, -1) : defaultAuthority;
+
+const exchangeOAuthConfig = {
+    // 优先使用专门的 Exchange Client ID，如果没有设置则回退到 MS_CLIENT_ID (不推荐，但保持兼容性)
+    clientId: process.env.EXCHANGE_CLIENT_ID || process.env.MS_CLIENT_ID || "",
+    clientSecret: process.env.EXCHANGE_CLIENT_SECRET || process.env.MS_CLIENT_SECRET || "",
+    authUrl: process.env.EXCHANGE_AUTH_URL || `${authority}/oauth2/v2.0/authorize`, 
+    tokenUrl: process.env.EXCHANGE_TOKEN_URL || `${authority}/oauth2/v2.0/token`,
+    redirectUri: process.env.EXCHANGE_REDIRECT_URI || `${BACKEND_URL}/auth/exchange/callback`,
+    // 默认改为 Microsoft Graph 最小 Delegated 权限（邮件/日历只读）
+    // 可通过 EXCHANGE_SCOPE 覆盖
+    scope: process.env.EXCHANGE_SCOPE || "offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Calendars.Read"
+};
+
+const cafBaseUrlRaw = process.env.CAF_SERVER_BASE_URL || '';
+const cafBaseUrl = cafBaseUrlRaw.endsWith('/') ? cafBaseUrlRaw.slice(0, -1) : cafBaseUrlRaw;
+const cafConfig = {
+    baseUrl: cafBaseUrl,
+    clientId: '',
+    clientSecret: '',
+    redirectUri: process.env.CAF_REDIRECT_URI || `${BACKEND_URL}/auth/caf/callback`,
+    subServerName: process.env.CAF_SUBSERVER_NAME || 'AI Time Manager'
+};
+
+const cafCredsFile = process.env.CAF_CREDENTIALS_FILE || path.join(process.cwd(), 'server', '.caf-client.json');
+const cafPublicKeyFile = process.env.CAF_PUBLIC_KEY_FILE || path.join(process.cwd(), 'server', '.caf-public.pem');
+const cafPrivateKeyFile = process.env.CAF_PRIVATE_KEY_FILE || path.join(process.cwd(), 'server', '.caf-private.pem');
+
+async function ensureCafKeyPair(): Promise<{ publicKey: string; privateKey: string }> {
+    try {
+        const [publicKey, privateKey] = await Promise.all([
+            fs.readFile(cafPublicKeyFile, 'utf8'),
+            fs.readFile(cafPrivateKeyFile, 'utf8')
+        ]);
+        return { publicKey, privateKey };
+    } catch {
+        const pair = generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+        });
+
+        await fs.mkdir(path.dirname(cafPublicKeyFile), { recursive: true });
+        await Promise.all([
+            fs.writeFile(cafPublicKeyFile, pair.publicKey, 'utf8'),
+            fs.writeFile(cafPrivateKeyFile, pair.privateKey, { encoding: 'utf8', mode: 0o600 })
+        ]);
+
+        logger.info('Generated CAF RSA key pair for subserver registration.');
+        return { publicKey: pair.publicKey, privateKey: pair.privateKey };
+    }
+}
+
+async function loadCafCredentials(): Promise<{ id: string; secret: string } | null> {
+    try {
+        const raw = await fs.readFile(cafCredsFile, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed?.id && parsed?.secret) {
+            return { id: String(parsed.id), secret: String(parsed.secret) };
+        }
+    } catch {
+        // Ignore missing/invalid file and fall back to auto registration.
+    }
+    return null;
+}
+
+async function saveCafCredentials(credentials: { id: string; secret: string }) {
+    await fs.mkdir(path.dirname(cafCredsFile), { recursive: true });
+    await fs.writeFile(cafCredsFile, JSON.stringify(credentials, null, 2), 'utf8');
+}
+
+async function ensureCafClientCredentials() {
+    if (!cafConfig.baseUrl) {
+        logger.warn('CAF_SERVER_BASE_URL is empty, CAF login is disabled.');
+        return;
+    }
+
+    const persisted = await loadCafCredentials();
+    if (persisted) {
+        cafConfig.clientId = persisted.id;
+        cafConfig.clientSecret = persisted.secret;
+        logger.info('Loaded CAF subserver credentials from persisted file.');
+        return;
+    }
+
+    const { publicKey } = await ensureCafKeyPair();
+    const registerResp = await axios.post(
+        `${cafConfig.baseUrl}/api/subserver/register`,
+        {
+            name: cafConfig.subServerName,
+            public_key: publicKey
+        },
+        {
+            headers: { 'Content-Type': 'application/json' }
+        }
+    );
+
+    const id = registerResp.data?.id;
+    const secret = registerResp.data?.secret;
+    if (!id || !secret) {
+        throw new Error('CAF register response missing id/secret');
+    }
+
+    cafConfig.clientId = String(id);
+    cafConfig.clientSecret = String(secret);
+    await saveCafCredentials({ id: cafConfig.clientId, secret: cafConfig.clientSecret });
+    logger.info('CAF subserver auto-registration completed and credentials persisted.');
+}
+
+function decodeJwtPayload(token: string): Record<string, any> | null {
+    try {
+        const parts = token.split('.');
+        if (parts.length < 2) return null;
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const normalized = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+        const json = Buffer.from(normalized, 'base64').toString('utf8');
+        return JSON.parse(json);
+    } catch {
+        return null;
+    }
+}
+
+function createDefaultWelcomeTask(): Task {
+    return {
+        id: uuidv4(),
+        name: '测试任务',
+        description: '恭喜你成功注册时锚平台~新的任务会推送到这里哦',
+        dueDate: toShanghaiISO(),
+        startTime: toShanghaiISO(),
+        endTime: toShanghaiISO(),
+        completed: false,
+        pushedToMSTodo: false,
+        scheduleType: 'single'
+    };
+}
+
+async function findOrCreateCafUser(cafSub: string, emailHint?: string, nameHint?: string) {
+    const fallbackEmail = `caf_${cafSub}@caf.local`;
+    const email = (emailHint || fallbackEmail).toLowerCase();
+    let user = await findUserByEmail(email);
+    if (user) {
+        return user;
+    }
+
+    const id = uuidv4();
+    user = {
+        id,
+        email,
+        name: nameHint || email.split('@')[0] || 'CAF用户',
+        passwordHash: undefined,
+        MSbinded: false,
+        ExchangeBinded: false,
+        SmtpBinded: false,
+        ebridgeBinded: false,
+        timetableUrl: '',
+        timetableFetchLevel: 0,
+        mailReadingSpan: Number(process.env.EMAIL_READ_LIMIT) || 30,
+        conflictBoundaryInclusive: false,
+        isConflictScheduleAllowed: true,
+        tasks: [createDefaultWelcomeTask()],
+        userProfile: {
+            company: '',
+            school: "Xi'an Jiaotong-Liverpool University",
+            campus: 'SIP',
+            schoolYear: 'Year 1'
+        }
+    };
+    await dbService.addUser(user);
+    userCache.set(id, user);
+    return user;
+}
+
+// 注册新用户时，不再默认绑定ebridge/Exchange
+app.post('/register', async (req, res) => {
+    const { email, password, name } = req.body || {};
+    if (!email || !password || !name) return res.status(400).json({ error: 'email, password and name required' });
+
+    try {
+        // 检查用户是否已存在
+        const existingUser = await findUserByEmail(email);
+        if (existingUser) return res.status(409).json({ error: 'user already exists' });
+
+        const passwordHash = await bcrypt.hash(password, 10);
+        const id = uuidv4();
+        const user: User = {
+            id,
+            email,
+            name,
+            passwordHash: bcrypt.hashSync(password, process.env.BCRYPT_SALT_ROUNDS ? parseInt(process.env.BCRYPT_SALT_ROUNDS) : 10),
+            MSbinded: false,
+            ExchangeBinded: false,
+            ebridgeBinded: false,
+            timetableUrl: '',
+            timetableFetchLevel: 0,
+            mailReadingSpan: Number(process.env.EMAIL_READ_LIMIT) || 30,
+            conflictBoundaryInclusive: false,
+            isConflictScheduleAllowed: true,
+            tasks: [{
+                id: uuidv4(),
+                name: '测试任务',
+                description: '恭喜你成功注册时锚平台~新的任务会推送到这里哦',
+                dueDate: toShanghaiISO(),
+                startTime: toShanghaiISO(),
+                endTime: toShanghaiISO(),
+                completed: false,
+                pushedToMSTodo: false,
+                scheduleType: 'single',
+            }],
+            userProfile: {
+                company: '',
+                school: "Xi'an Jiaotong-Liverpool University",
+                campus: 'SIP',
+                schoolYear: 'Year 1'
+            }
+        };
+
+        const token = signJwt({ sub: id, email });
+        user.JWTtoken = token;
+
+        // 保存到数据库
+        await dbService.addUser(user);
+        // 更新缓存
+        userCache.set(id, user);
+
+        return res.status(201).json({ token });
+    } catch (error) {
+        logger.error('Registration error:', error);
+        return res.status(500).json({ error: 'Failed to register user' });
+    }
+});
+
+app.get('/auth/exchange', (req, res) => {
+    if (!exchangeOAuthConfig.clientId || !exchangeOAuthConfig.authUrl) {
+         return res.status(500).send('Exchange Auth not configured on server.');
+    }
+
+    // Generate state with JWT and login_hint if provided
+    const providedJwt = (req.query.jwt as string) || (() => {
+        const auth = (req.headers.authorization || '') as string;
+        if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
+        return undefined;
+    })();
+    const loginHint = req.query.login_hint as string;
+
+    let stateObj: any = {};
+    if (providedJwt) stateObj.jwt = providedJwt;
+    if (loginHint) stateObj.email = loginHint;
+    
+    // 如果没有 jwt 也没有 loginHint，state 为 undefined
+    const state = Object.keys(stateObj).length > 0 ? Buffer.from(JSON.stringify(stateObj)).toString('base64') : undefined;
+
+    const params = new URLSearchParams({
+        client_id: exchangeOAuthConfig.clientId,
+        redirect_uri: exchangeOAuthConfig.redirectUri,
+        response_type: 'code',
+        scope: exchangeOAuthConfig.scope,
+        prompt: 'login', // 强制重新登录
+    });
+
+    // 强制指定组织账户 (School/Work)，避免个人账户混淆
+    params.append('domain_hint', 'organizations');
+
+    // Add state properly encoded
+    if (state) {
+        params.append('state', state); 
+    }
+
+    // Add login_hint if provided (for XJTLU account)
+    if (loginHint) {
+        params.append('login_hint', loginHint);
+    }
+
+    res.redirect(`${exchangeOAuthConfig.authUrl}?${params.toString()}`);
+});
+
+app.get('/auth/exchange/callback', async (req, res) => {
+    const code = req.query.code as string;
+    const error = req.query.error as string;
+    const errorDescription = req.query.error_description as string;
+    const state = req.query.state as string; // Will contain JWT directly if set above logic
+
+    if (error) {
+         logger.error('Exchange Auth error callback:', error, errorDescription);
+         if (error.includes('invalid_scope')) {
+            const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
+                    h1 { color: #d32f2f; margin-bottom: 20px; }
+                    .card { background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+                    p { margin-bottom: 1em; }
+                    code { background: #e9ecef; padding: 2px 5px; border-radius: 4px; font-family: Consolas, monospace; }
+                    ol { padding-left: 20px; }
+                    li { margin-bottom: 10px; }
+                    strong { color: #C00; }
+                </style>
+            </head>
+            <body>
+                <h1>授权失败：权限范围 (Scope) 错误</h1>
+                <div class="card">
+                    <p>Azure 拒绝了您的请求，因为应用没有正确配置 <strong>Microsoft Graph Delegated</strong> 权限。</p>
+                    <p>当前默认 Scope 为：<code>offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Calendars.Read</code></p>
+                    <p>但您的 Azure 应用注册中可能缺失了对应的 API 声明，请严格按照以下步骤检查：</p>
+                    <hr>
+                    
+                    <h3>核心排查点：应用注册类型 (Supported Account Types)</h3>
+                    <p><strong>这是最可能的原因：</strong> 您可能正在尝试使用一个仅支持"个人账户"的应用 ID 来请求"企业/学校"的 Graph 权限。</p>
+                    <ul>
+                        <li><strong>现象：</strong> 学校邮箱可在 Outlook 客户端登录，但自注册应用登录时提示需要管理员授权或 scope 无效。</li>
+                        <li><strong>原因：</strong> 仅限个人 (Personal) 的应用注册无法稳定用于学校/组织租户的 Graph 企业资源访问。</li>
+                        <li><strong>解决方案：</strong>
+                            <ol>
+                                <li><strong>创建新应用注册：</strong> 在 Azure Portal 注册一个全新的 App。</li>
+                                <li><strong>选择类型：</strong> 必须选择 <strong>"Accounts in any organizational directory (Any Azure AD directory - Multitenant)"</strong> (任何组织目录中的账户)。</li>
+                                <li><strong>迁移配置：</strong> 在新应用中添加 API 权限 (Microsoft Graph Delegated) 和 Redirect URI。</li>
+                                <li><strong>更新环境变量：</strong> 获取新的 Client ID 和 Secret，分别填入 <code>.env</code> 文件中的 <code>EXCHANGE_CLIENT_ID</code> 和 <code>EXCHANGE_CLIENT_SECRET</code> 字段 (不要覆盖 MS_CLIENT_ID)。</li>
+                            </ol>
+                        </li>
+                    </ul>
+
+                    <hr>
+                    <h3>备选检查步骤</h3>
+                    <ol>
+                        <li><strong>API 权限确认：</strong> 确保已添加 <strong>"Microsoft Graph"</strong> -> <strong>"Mail.Read"</strong>、<strong>"Calendars.Read"</strong>（Delegated）。</li>
+                        <li><strong>租户用户同意策略：</strong> 让管理员在 Entra ID 中允许用户同意低风险应用权限，或至少允许上述权限由普通用户同意。</li>
+                        <li><strong>管理员同意（兜底）：</strong> 若租户策略不允许用户同意，仍需管理员点击 <strong>"Grant admin consent"</strong>。</li>
+                    </ol>
+                    <p><small style="color: #666;">错误代码: ${error} - ${errorDescription}</small></p>
+                </div>
+            </body>
+            </html>
+            `;
+            return res.status(400).send(html);
+         }
+         return res.status(400).send(`Auth failed: ${error} - ${errorDescription}`);
+    }
+    if (!code) {
+        return res.status(400).send('No code provided');
+    }
+
+    try {
+        const bodyParams = new URLSearchParams();
+        bodyParams.append('client_id', exchangeOAuthConfig.clientId);
+        bodyParams.append('client_secret', exchangeOAuthConfig.clientSecret);
+        bodyParams.append('grant_type', 'authorization_code');
+        bodyParams.append('code', code);
+        bodyParams.append('redirect_uri', exchangeOAuthConfig.redirectUri);
+        bodyParams.append('scope', exchangeOAuthConfig.scope);
+
+        const tokenResponse = await axios.post(exchangeOAuthConfig.tokenUrl, bodyParams, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        const { access_token, refresh_token, expires_in } = tokenResponse.data;
+        const expiresAt = Date.now() + ((expires_in || 3600) * 1000);
+
+        // Verify state (JWT) to bind to user
+        let providedJwt: string | undefined;
+        let loginHintEmail: string | undefined;
+
+        try {
+            if (state) {
+                const decodedState = Buffer.from(state, 'base64').toString('utf-8');
+                try {
+                    const stateObj = JSON.parse(decodedState);
+                    providedJwt = stateObj.jwt;
+                    loginHintEmail = stateObj.email;
+                } catch (e) {
+                    // 如果解析 JSON 失败，可能 state 本身就是 JWT (兼容旧逻辑)
+                    providedJwt = decodedState;
+                }
+            }
+        } catch (e) {
+            logger.warn('Error parsing Exchange auth state:', e);
+        }
+        
+        if (providedJwt) {
+            const decoded = verifyJwt(providedJwt);
+            if (decoded && decoded.sub) {
+                const userId = decoded.sub as string;
+                let user = await dbService.getUserById(userId) || undefined; // Force db fetch to be safe
+
+                if (user) {
+                    user.ExchangeAccessToken = access_token;
+                    user.ExchangeRefreshToken = refresh_token;
+                    user.ExchangeTokenExpiresAt = expiresAt;
+                    user.ExchangeBinded = true;
+                    if (loginHintEmail) {
+                        user.XJTLUaccount = loginHintEmail;
+                    }
+
+                    // 尝试根据 Access Token 获取用户邮箱（作为双重确认或如果没有 login_hint）
+                    // try {
+                    //      // TODO: Call Graph API /me or similar if token scope allows
+                    // } catch (e) { logger.warn('Failed to fetch user email from Exchange token'); }
+                    
+                    await dbService.updateUser(user);
+                    userCache.set(userId, user); // Update cache
+                    
+                    logger.info(`Bound Exchange OAuth to user ${userId}`);
+                    res.send('<h1>Exchange 绑定成功!</h1><p>您可以关闭此窗口并刷新主应用。</p><script>window.opener?.postMessage({type: "EXCHANGE_BOUND"}, "*"); setTimeout(() => window.close(), 3000);</script>');
+                    return;
+                }
+            }
+        }
+        
+        res.status(400).send('Failed to bind to user session. Please try again from the settings page.');
+
+    } catch (err: any) {
+        logger.error('Exchange Token Exchange failed:', err.response?.data || err.message);
+        res.status(500).send(`Token exchange failed: ${JSON.stringify(err.response?.data || err.message)}`);
+    }
+});
+
+// SMTP bind/unbind routes added after Exchange callback
+app.post('/auth/smtp/bind', authenticateToken, async (req: any, res: any) => {
+    const user = req.user as User;
+    const { smtpEmail, smtpPassword, smtpHost, smtpPort, smtpTls } = req.body || {};
+    if (!smtpEmail || !smtpPassword || !smtpHost || !smtpPort) {
+        return res.status(400).json({ error: 'Missing required SMTP configuration fields' });
+    }
+    user.SmtpEmail = smtpEmail;
+    user.SmtpPassword = smtpPassword;
+    user.SmtpHost = smtpHost;
+    user.SmtpPort = Number(smtpPort);
+    user.SmtpTls = Boolean(smtpTls);
+    user.SmtpBinded = true;
+    await dbService.updateUser(user);
+    userCache.set(user.id, user);
+    res.json({ success: true, message: 'SMTP bound successfully' });
+});
+
+app.post('/auth/smtp/unbind', authenticateToken, async (req: any, res: any) => {
+    const user = req.user as User;
+    user.SmtpEmail = undefined;
+    user.SmtpPassword = undefined;
+    user.SmtpHost = undefined;
+    user.SmtpPort = undefined;
+    user.SmtpTls = undefined;
+    user.SmtpBinded = false;
+    await dbService.updateUser(user);
+    userCache.set(user.id, user);
+    res.json({ success: true, message: 'SMTP unbound successfully' });
+});
+
+app.get('/auth/caf', (req, res) => {
+    if (!cafConfig.baseUrl || !cafConfig.clientId) {
+        return res.status(500).send('CAF auth is not ready on server (subserver registration not completed).');
+    }
+
+    const params = new URLSearchParams({
+        client_id: cafConfig.clientId,
+        redirect_uri: cafConfig.redirectUri,
+    });
+
+    res.redirect(`${cafConfig.baseUrl}/web/oauth/authorize?${params.toString()}`);
+});
+
+app.get('/auth/caf/callback', async (req, res) => {
+    const code = req.query.code as string;
+    if (!code) {
+        return res.status(400).send('No authorization code provided by CAF.');
+    }
+    if (!cafConfig.baseUrl || !cafConfig.clientId || !cafConfig.clientSecret) {
+        return res.status(500).send('CAF auth is not configured on server.');
+    }
+
+    try {
+        const tokenResponse = await axios.post(
+            `${cafConfig.baseUrl}/api/oauth/token`,
+            {
+                grant_type: 'authorization_code',
+                client_id: cafConfig.clientId,
+                client_secret: cafConfig.clientSecret,
+                code,
+            },
+            {
+                headers: { 'Content-Type': 'application/json' }
+            }
+        );
+
+        const { access_token, expires_in } = tokenResponse.data || {};
+        if (!access_token) {
+            return res.status(500).send('CAF token exchange returned no access_token.');
+        }
+
+        const claims = decodeJwtPayload(access_token) || {};
+        const cafSub = (claims.sub || claims.user_id || claims.uid || claims.id || '').toString();
+        const email = (claims.email || claims.preferred_username || claims.upn || '').toString();
+        const name = (claims.name || claims.username || '').toString();
+
+        if (!cafSub && !email) {
+            return res.status(500).send('Unable to identify CAF user from token payload.');
+        }
+
+        const stableSub = cafSub || email;
+        const user = await findOrCreateCafUser(stableSub, email || undefined, name || undefined);
+
+        user.CAFSub = stableSub;
+        user.CAFAccessToken = access_token;
+        user.CAFTokenExpiresAt = Date.now() + ((Number(expires_in) || 3600) * 1000);
+
+        const jwtToken = signJwt({ sub: user.id, email: user.email });
+        user.JWTtoken = jwtToken;
+
+        await dbService.updateUser(user);
+        userCache.set(user.id, user);
+
+        const target = `${FRONTEND_URL}/login?token=${encodeURIComponent(jwtToken)}&from=caf`;
+        return res.redirect(target);
+    } catch (error: any) {
+        logger.error('CAF OAuth callback failed:', error.response?.data || error.message);
+        const msg = encodeURIComponent('CAF 登录失败，请稍后重试');
+        return res.redirect(`${FRONTEND_URL}/login?caf_error=${msg}`);
+    }
+});
+
+// Configure API Routes
 const apiRouter = initializeApiRoutes(authenticateToken);
 app.use('/api', apiRouter);
+
+// 配置算法路由
+const algorithmRouter = initializeAlgorithmRoutes(authenticateToken);
+app.use('/api/algorithms', algorithmRouter);
 
 // Initialize MCP Routes
 initializeMcpRoutes(app, authenticateToken);
@@ -275,6 +797,9 @@ app.post('/register', async (req, res) => {
             name,
             passwordHash: bcrypt.hashSync(password, process.env.BCRYPT_SALT_ROUNDS ? parseInt(process.env.BCRYPT_SALT_ROUNDS) : 10),
             MSbinded: false,
+            // 默认设置为非绑定
+            ExchangeBinded: false,
+            SmtpBinded: false,
             ebridgeBinded: false,
             timetableUrl: '',
             timetableFetchLevel: 0,
@@ -381,7 +906,7 @@ app.get('/auth', (req, res) => {
 
     const authCodeUrlParameters: any = {
         scopes: ["https://graph.microsoft.com/Tasks.ReadWrite"],
-        redirectUri: "http://localhost:3000/redirect",
+        redirectUri: "https://schedule.apoints.cn/redirect",
     };
     if (state) authCodeUrlParameters.state = state;
 
@@ -398,7 +923,7 @@ app.get('/redirect', async (req, res) => {
     const tokenRequest = {
         code: req.query.code as string,
         scopes: ["https://graph.microsoft.com/Tasks.ReadWrite"],
-        redirectUri: "http://localhost:3000/redirect",
+        redirectUri: `${FRONTEND_URL}/redirect`,
     };
 
     try {
@@ -441,7 +966,7 @@ app.get('/redirect', async (req, res) => {
         // 如果没有提供 JWT 或配对失败，仅返回成功提示（或提供指示下一步的页面）
         res.send('身份认证成功！您已经成功绑定微软To Do。将重新跳转回主页');
         //将用户重定向到主页面
-        res.redirect(process.env.FRONTEND_URL || "http://localhost:5173/");
+        res.redirect(FRONTEND_URL);
     } catch (error) {
         logger.error('Token acquisition error:', error);
         res.status(500).send('Authentication failed');
@@ -485,6 +1010,12 @@ async function startServer() {
         });
 
         logger.info(`Loaded ${users.length} users from database`);
+
+        try {
+            await ensureCafClientCredentials();
+        } catch (cafError: any) {
+            logger.error('CAF auto-registration failed:', cafError?.response?.data || cafError?.message || cafError);
+        }
 
         // 启动服务器并初始化 WebSocket
         const server = app.listen(PORT, () => {

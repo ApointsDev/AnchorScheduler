@@ -46,6 +46,7 @@ class DatabaseService {
                     timetableFetchLevel INTEGER DEFAULT 0,
                     mailReadingSpan INTEGER DEFAULT 30,
                     conflictBoundaryInclusive BOOLEAN DEFAULT 0,
+                    MSRefreshToken TEXT,
                     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
@@ -62,6 +63,15 @@ class DatabaseService {
                     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
             `);
+            
+            // 如果表已存在但缺少ExchangeBinded字段，则添加该字段
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN ExchangeBinded BOOLEAN DEFAULT 0;`); } catch (e) { logger.info('ExchangeBinded column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN ExchangeAccessToken TEXT;`); } catch (e) { logger.info('ExchangeAccessToken column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN ExchangeRefreshToken TEXT;`); } catch (e) { logger.info('ExchangeRefreshToken column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN ExchangeTokenExpiresAt INTEGER;`); } catch (e) { logger.info('ExchangeTokenExpiresAt column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN CAFSub TEXT;`); } catch (e) { logger.info('CAFSub column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN CAFAccessToken TEXT;`); } catch (e) { logger.info('CAFAccessToken column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN CAFTokenExpiresAt INTEGER;`); } catch (e) { logger.info('CAFTokenExpiresAt column exists or error:', (e as Error).message); }
             
             // 如果表已存在但缺少XJTLUaccount字段，则添加该字段
             try {
@@ -102,12 +112,34 @@ class DatabaseService {
                 logger.info('conflictBoundaryInclusive column already exists or error adding it:', (e as Error).message);
             }
 
+            // 如果表已存在但缺少 highEnergyPeriods 字段，则添加该字段
+            try {
+                await this.db.exec(`ALTER TABLE users ADD COLUMN highEnergyPeriods TEXT DEFAULT '[]';`);
+            } catch (e) {
+                logger.info('highEnergyPeriods column already exists or error adding it:', (e as Error).message);
+            }
+
             // 如果缺少 weekOffset 字段则添加（用户可配置的周数偏移量）
             try {
                 await this.db.exec(`ALTER TABLE users ADD COLUMN weekOffset INTEGER DEFAULT 0;`);
             } catch (e) {
                 logger.info('weekOffset column already exists or error adding it:', (e as Error).message);
             }
+
+            // 添加 MSRefreshToken 字段
+            try {
+                await this.db.exec(`ALTER TABLE users ADD COLUMN MSRefreshToken TEXT;`);
+            } catch (e) {
+                logger.info('MSRefreshToken column already exists or error adding it:', (e as Error).message);
+            }
+
+            // Smtp 绑定字段 (migration)
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpBinded BOOLEAN DEFAULT 0;`); } catch (e) { logger.info('SmtpBinded column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpEmail TEXT;`); } catch (e) { logger.info('SmtpEmail column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpPassword TEXT;`); } catch (e) { logger.info('SmtpPassword column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpHost TEXT;`); } catch (e) { logger.info('SmtpHost column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpPort INTEGER;`); } catch (e) { logger.info('SmtpPort column exists or error:', (e as Error).message); }
+            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpTls BOOLEAN DEFAULT 1;`); } catch (e) { logger.info('SmtpTls column exists or error:', (e as Error).message); }
 
             // tasks 表新增列（迁移场景）
             try { await this.db.exec(`ALTER TABLE tasks ADD COLUMN recurrenceRule TEXT;`); } catch (e) { logger.info('recurrenceRule column exists or error:', (e as Error).message); }
@@ -209,10 +241,14 @@ class DatabaseService {
         
           await this.db.run(
           `INSERT INTO users 
-           (id, email, name, XJTLUaccount, XJTLUPassword, passwordHash, JWTtoken, MStoken, MSbinded, ebridgeBinded, timetableUrl, timetableFetchLevel, mailReadingSpan, conflictBoundaryInclusive, weekOffset) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, email, name, XJTLUaccount, XJTLUPassword, passwordHash, JWTtoken, MStoken, MSRefreshToken, MSbinded, ExchangeAccessToken, ExchangeRefreshToken, ExchangeTokenExpiresAt, ExchangeBinded, SmtpBinded, SmtpEmail, SmtpPassword, SmtpHost, SmtpPort, SmtpTls, CAFSub, CAFAccessToken, CAFTokenExpiresAt, ebridgeBinded, timetableUrl, timetableFetchLevel, mailReadingSpan, conflictBoundaryInclusive, weekOffset) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [user.id, user.email, user.name, user.XJTLUaccount, user.XJTLUPassword, user.passwordHash, 
-           user.JWTtoken, user.MStoken, user.MSbinded ? 1 : 0, user.ebridgeBinded ? 1 : 0, user.timetableUrl, user.timetableFetchLevel || 0, user.mailReadingSpan ?? 30, user.conflictBoundaryInclusive ? 1 : 0, user.weekOffset || 0]
+           user.JWTtoken, user.MStoken, user.MSRefreshToken, user.MSbinded ? 1 : 0, 
+           user.ExchangeAccessToken, user.ExchangeRefreshToken, user.ExchangeTokenExpiresAt, user.ExchangeBinded ? 1 : 0,
+           user.SmtpBinded ? 1 : 0, user.SmtpEmail, user.SmtpPassword, user.SmtpHost, user.SmtpPort, user.SmtpTls ? 1 : 0,
+           user.CAFSub, user.CAFAccessToken, user.CAFTokenExpiresAt,
+           user.ebridgeBinded ? 1 : 0, user.timetableUrl, user.timetableFetchLevel || 0, user.mailReadingSpan ?? 30, user.conflictBoundaryInclusive ? 1 : 0, user.weekOffset || 0]
        );
         
         // 保存用户的任务
@@ -227,10 +263,18 @@ class DatabaseService {
         await this.db.run(
             `UPDATE users 
              SET email = ?, name = ?, XJTLUaccount = ?, XJTLUPassword = ?, passwordHash = ?, 
-                 JWTtoken = ?, MStoken = ?, MSbinded = ?, ebridgeBinded = ?, timetableUrl = ?, timetableFetchLevel = ?, mailReadingSpan = ?, conflictBoundaryInclusive = ?, weekOffset = ?, updatedAt = CURRENT_TIMESTAMP
+                 JWTtoken = ?, MStoken = ?, MSRefreshToken = ?, MSbinded = ?, 
+                 ExchangeAccessToken = ?, ExchangeRefreshToken = ?, ExchangeTokenExpiresAt = ?, ExchangeBinded = ?,
+                 SmtpBinded = ?, SmtpEmail = ?, SmtpPassword = ?, SmtpHost = ?, SmtpPort = ?, SmtpTls = ?,
+                 CAFSub = ?, CAFAccessToken = ?, CAFTokenExpiresAt = ?,
+                 ebridgeBinded = ?, timetableUrl = ?, timetableFetchLevel = ?, mailReadingSpan = ?, conflictBoundaryInclusive = ?, weekOffset = ?, updatedAt = CURRENT_TIMESTAMP
              WHERE id = ?`,
             [user.email, user.name, user.XJTLUaccount, user.XJTLUPassword, user.passwordHash, 
-             user.JWTtoken, user.MStoken, user.MSbinded ? 1 : 0, user.ebridgeBinded ? 1 : 0, user.timetableUrl, user.timetableFetchLevel || 0, user.mailReadingSpan ?? 30, user.conflictBoundaryInclusive ? 1 : 0, user.weekOffset || 0, user.id]
+             user.JWTtoken, user.MStoken, user.MSRefreshToken, user.MSbinded ? 1 : 0, 
+             user.ExchangeAccessToken, user.ExchangeRefreshToken, user.ExchangeTokenExpiresAt, user.ExchangeBinded ? 1 : 0,
+             user.SmtpBinded ? 1 : 0, user.SmtpEmail, user.SmtpPassword, user.SmtpHost, user.SmtpPort, user.SmtpTls ? 1 : 0,
+             user.CAFSub, user.CAFAccessToken, user.CAFTokenExpiresAt,
+             user.ebridgeBinded ? 1 : 0, user.timetableUrl, user.timetableFetchLevel || 0, user.mailReadingSpan ?? 30, user.conflictBoundaryInclusive ? 1 : 0, user.weekOffset || 0, user.id]
         );
     }
     
@@ -654,18 +698,42 @@ class DatabaseService {
             passwordHash: row.passwordHash,
             JWTtoken: row.JWTtoken,
             MStoken: row.MStoken,
+            MSRefreshToken: row.MSRefreshToken,
             MSbinded: row.MSbinded === 1,
+            ExchangeAccessToken: row.ExchangeAccessToken,
+            ExchangeRefreshToken: row.ExchangeRefreshToken,
+            ExchangeTokenExpiresAt: row.ExchangeTokenExpiresAt,
+            ExchangeBinded: row.ExchangeBinded === 1,
+            SmtpBinded: row.SmtpBinded === 1,
+            SmtpEmail: row.SmtpEmail,
+            SmtpPassword: row.SmtpPassword,
+            SmtpHost: row.SmtpHost,
+            SmtpPort: row.SmtpPort,
+            SmtpTls: row.SmtpTls === 1,
+            CAFSub: row.CAFSub,
+            CAFAccessToken: row.CAFAccessToken,
+            CAFTokenExpiresAt: row.CAFTokenExpiresAt,
             ebridgeBinded: row.ebridgeBinded === 1,
             timetableUrl: row.timetableUrl || '',
             timetableFetchLevel: row.timetableFetchLevel || 0,
             mailReadingSpan: row.mailReadingSpan ?? 30,
             conflictBoundaryInclusive: row.conflictBoundaryInclusive === 1,
             weekOffset: row.weekOffset || 0,
+            highEnergyPeriods: row.highEnergyPeriods ? JSON.parse(row.highEnergyPeriods) : {},
             tasks: tasks,
             emsClient: undefined // 运行时生成，不持久化
             
         };
     }
+
+    async updateUserHighEnergyPeriods(userId: string, periods: Record<number, any[]>): Promise<void> {
+        if (!this.db) throw new Error('Database not initialized');
+        await this.db.run(
+            'UPDATE users SET highEnergyPeriods = ? WHERE id = ?',
+            [JSON.stringify(periods), userId]
+        );
+    }
+
                 /**
              * 查询指定用户的日程队列
              */

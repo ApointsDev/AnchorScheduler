@@ -106,6 +106,11 @@ MS_CLIENT_ID=your-microsoft-client-id
 MS_CLIENT_SECRET=your-microsoft-client-secret
 MS_AUTHORITY=https://login.microsoftonline.com/common
 
+# Exchange(Graph delegated) 认证配置 / Exchange(Graph delegated) Authentication
+EXCHANGE_CLIENT_ID=your-exchange-client-id
+EXCHANGE_CLIENT_SECRET=your-exchange-client-secret
+EXCHANGE_SCOPE=offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Calendars.Read
+
 # OpenAI 配置 / OpenAI Configuration
 OPENAI_API_KEY=your-openai-api-key
 OPENAI_MODEL=gpt-4o
@@ -114,6 +119,8 @@ OPENAI_MODEL=gpt-4o
 EXCHANGE_URL=https://your-exchange-server/EWS/Exchange.asmx
 EXCHANGE_DOMAIN=your-domain.com
 ```
+
+> 租户策略提示：若学校租户默认不允许用户同意第三方应用权限，需要管理员在 Microsoft Entra ID 中开启用户同意策略（至少允许低风险 delegated 权限），否则普通用户仍会被要求管理员授权。
 
 ### 开发模式 / Development Mode
 

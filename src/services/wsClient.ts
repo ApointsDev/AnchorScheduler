@@ -9,32 +9,52 @@ class WSClient {
   private handlers: Map<string, Set<MessageHandler>> = new Map();
   private globalHandlers: Set<MessageHandler> = new Set();
   private isClosing = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 50;
+  private stableTimer: ReturnType<typeof setTimeout> | null = null;
+  private wasStable = false;
 
   connectIfNeeded(token: string) {
     if (!token) return;
-    // if already connected with same token, noop
-    if (this.socket && this.token === token && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) return;
+    if (this.socket && this.token === token &&
+        (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) return;
     this.token = token;
-    this.url = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000').replace(/^http/, 'ws').replace(/^https/, 'wss') + `/ws?token=${token}`;
+    const isDev = import.meta.env.VITE_DEV_MODE === 'true';
+    const baseUrl = isDev ? 'http://localhost:3000' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000');
+    this.url = baseUrl.replace(/^http/, 'ws').replace(/^https/, 'wss') + `/ws?token=${token}`;
     this.isClosing = false;
+    this.reconnectAttempts = 0;
+    this.wasStable = false;
     this.setupSocket();
   }
 
   private setupSocket() {
     if (!this.url) return;
     try {
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+      if (this.stableTimer) {
+        clearTimeout(this.stableTimer);
+        this.stableTimer = null;
+      }
       if (this.socket) {
         try { this.socket.close(); } catch(_) {}
         this.socket = null;
       }
       this.socket = new WebSocket(this.url);
       this.socket.onopen = () => {
-        this.reconnectDelay = 1000;
+        this.stableTimer = setTimeout(() => {
+          this.reconnectDelay = 1000;
+          this.reconnectAttempts = 0;
+          this.wasStable = true;
+        }, 5000);
       };
       this.socket.onmessage = (evt) => {
         try {
           const data = JSON.parse(evt.data);
-          // auto-reply to server heartbeat ping with application-level pong
           if (data && data.type === 'ping') {
             this.send({ type: 'pong' });
           }
@@ -45,8 +65,19 @@ class WSClient {
       };
       this.socket.onclose = () => {
         if (this.isClosing) return;
-        setTimeout(() => {
+        if (this.stableTimer) {
+          clearTimeout(this.stableTimer);
+          this.stableTimer = null;
+        }
+        this.reconnectAttempts++;
+        if (this.reconnectAttempts > this.maxReconnectAttempts) {
+          console.warn('WebSocket max reconnect attempts reached, giving up');
+          return;
+        }
+        if (!this.wasStable) {
           this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, this.maxReconnect);
+        }
+        this.reconnectTimer = setTimeout(() => {
           this.setupSocket();
         }, this.reconnectDelay);
       };
@@ -54,8 +85,7 @@ class WSClient {
         // close will trigger reconnect
       };
     } catch (e) {
-      // schedule reconnect
-      setTimeout(() => this.setupSocket(), this.reconnectDelay);
+      this.reconnectTimer = setTimeout(() => this.setupSocket(), this.reconnectDelay);
     }
   }
 
@@ -71,6 +101,14 @@ class WSClient {
 
   disconnect() {
     this.isClosing = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.stableTimer) {
+      clearTimeout(this.stableTimer);
+      this.stableTimer = null;
+    }
     if (this.socket) {
       try { this.socket.close(); } catch(_) {}
       this.socket = null;

@@ -110,6 +110,39 @@ Invoke-RestMethod -Method Post -Uri http://localhost:3000/register -Body $body -
 
 ---
 
+### GET /auth/caf
+
+- 描述：跳转到 CAF 授权页，使用授权码模式登录。
+- URL：`http://localhost:3000/auth/caf`
+- 前置配置（环境变量）：
+  - `CAF_SERVER_BASE_URL`：CAF 服务地址，例如 `http://localhost:8081`
+  - `CAF_REDIRECT_URI`：可选，不填则默认 `http://localhost:3000/auth/caf/callback`
+
+- 自动注册说明：
+  - 服务启动时会自动生成 RSA 密钥对（若不存在）。
+  - 服务启动时会自动调用 `POST /api/subserver/register` 获取 `id/secret`。
+  - 获取到的凭据会持久化到本地文件（默认 `server/.caf-client.json`），后续复用。
+  - 因此无需在 `.env` 中手工配置 `CAF_CLIENT_ID` 与 `CAF_CLIENT_SECRET`。
+
+---
+
+### GET /auth/caf/callback
+
+- 描述：CAF 授权完成后的回调端点。
+- URL：`http://localhost:3000/auth/caf/callback?code=<authorization_code>`
+- 处理流程：
+  1. 使用 `code` 调用 CAF `POST /api/oauth/token` 换取 `access_token`。
+  2. 从 token payload 中提取用户标识（优先 `sub`，其次邮箱相关字段）。
+  3. 若本地用户不存在则自动创建。
+  4. 签发本系统 JWT 并重定向到前端登录页，附带 `token` 参数完成自动登录。
+
+- 成功重定向示例：
+  - `http://localhost:5173/login?token=<jwt>&from=caf`
+- 失败重定向示例：
+  - `http://localhost:5173/login?caf_error=<message>`
+
+---
+
 ### GET /auth
 
 - 描述：生成 Microsoft OAuth 授权 URL 并重定向到微软登录页面。支持将本应用的 JWT 透传给微软（放入 OAuth 的 `state` 字段，base64 编码）。回调时微软会带回该 `state`，我们将它用于把微软 access token 和本地用户配对。
@@ -1046,3 +1079,251 @@ URL: `ws://<host>/ws?token=<JWT>` 必须携带有效 JWT（`sub` 为用户 ID）
 - 收到 `taskChange.completed` 更新本地完成状态并移除未来提醒。
 - 使用 `taskOccurrence` 触发桌面提醒或计时器。
 - 收到 `taskOccurrenceCanceled` 清理预设提醒。
+
+---
+
+## 算法端点说明
+所有算法相关端点均位于前缀 `/api/algorithms` 下。需要 JWT 认证。
+
+### 数据类型定义
+
+#### DDLTask (任务)
+```json
+{
+  "id": "string",
+  "name": "string",
+  "deadline": "ISO8601 Date String",
+  "estimatedDuration": "number (minutes)",
+  "priority": "number (optional)",
+  "earliestStart": "ISO8601 Date String (optional)",
+  "energyRequirement": "'high' | 'normal' | 'low' (optional)",
+  "tags": ["string"] (optional)
+}
+```
+
+#### FixedEvent (固定事件)
+```json
+{
+  "id": "string",
+  "name": "string",
+  "startTime": "ISO8601 Date String",
+  "endTime": "ISO8601 Date String"
+}
+```
+
+#### TimeSlot (时间段)
+```json
+{
+  "id": "string",
+  "start": "ISO8601 Date String",
+  "end": "ISO8601 Date String",
+  "isHighEnergy": "boolean (optional)",
+  "isFragmented": "boolean (optional)"
+}
+```
+
+---
+
+### POST /api/algorithms/optimize-schedule
+- 描述：根据任务、固定事件和可用时间段优化个人日程。使用拓扑排序处理依赖，图着色处理冲突，匈牙利算法优化偏好。
+- 请求体（JSON）：
+  ```json
+  {
+    "tasks": [
+      { 
+        "id": "task-1", 
+        "name": "Complete Report", 
+        "deadline": "2023-10-27T18:00:00Z", 
+        "estimatedDuration": 120,
+        "priority": 1
+      }
+    ],
+    "fixedEvents": [
+      { 
+        "id": "event-1", 
+        "name": "Lunch", 
+        "startTime": "2023-10-27T12:00:00Z", 
+        "endTime": "2023-10-27T13:00:00Z" 
+      }
+    ],
+    "availableSlots": [
+      { 
+        "id": "slot-1", 
+        "start": "2023-10-27T09:00:00Z", 
+        "end": "2023-10-27T12:00:00Z",
+        "isHighEnergy": true
+      }
+    ],
+    "dependencies": [
+      ["task-1", "task-2"] // task-1 must finish before task-2 starts
+    ]
+  }
+  ```
+- 响应：
+  ```json
+  {
+    "success": true,
+    "assignments": {
+      "task-1": "slot-1" // Task ID mapped to Time Slot ID
+    }
+  }
+  ```
+
+### POST /api/algorithms/schedule-meeting
+- 描述：安排团队会议，使用线性规划寻找最优时间，考虑成员忙碌时间、偏好和调整成本。
+- 请求体（JSON）：
+  ```json
+  {
+    "teamMembers": [
+      {
+        "id": "user-1",
+        "name": "Alice",
+        "busySlots": [{ "start": "...", "end": "..." }],
+        "preferences": [{ "start": "...", "end": "..." }],
+        "maxAdjustmentCost": 10
+      }
+    ],
+    "requirements": { 
+      "duration": 60, 
+      "windowStart": "2023-10-27T09:00:00Z",
+      "windowEnd": "2023-10-27T18:00:00Z",
+      "requiredParticipants": ["user-1"]
+    },
+    "weights": { "preference": 1.0, "efficiency": 1.0, "fairness": 0.5 }
+  }
+  ```
+- 响应：
+  ```json
+  {
+    "success": true,
+    "result": {
+      "optimalTime": { "start": "...", "end": "..." },
+      "participants": ["user-1"],
+      "adjustments": {
+        "user-1": { "cost": 0, "reason": "None" }
+      },
+      "totalCost": 0,
+      "status": "optimal"
+    }
+  }
+  ```
+
+### POST /api/algorithms/critical-path
+- 描述：分析项目任务的关键路径，计算最早/最晚开始时间及松弛时间。
+- 请求体（JSON）：
+  ```json
+  {
+    "tasks": [
+      { 
+        "id": "t1", 
+        "duration": 60, 
+        "dependencies": [],
+        "optimistic": 45,
+        "pessimistic": 90,
+        "mostLikely": 60
+      },
+      {
+        "id": "t2",
+        "duration": 30,
+        "dependencies": ["t1"]
+      }
+    ],
+    "startDate": "2023-10-27T09:00:00Z"
+  }
+  ```
+- 响应：
+  ```json
+  {
+    "success": true,
+    "result": {
+      "criticalPath": ["t1", "t2"],
+      "projectDuration": 90,
+      "slackTimes": { "t1": 0, "t2": 0 },
+      "earliestStart": { "t1": "2023-10-27T09:00:00Z", "t2": "2023-10-27T10:00:00Z" },
+      "latestStart": { "t1": "2023-10-27T09:00:00Z", "t2": "2023-10-27T10:00:00Z" },
+      "taskDetails": {
+        "t1": { "es": "...", "ef": "...", "ls": "...", "lf": "...", "slack": 0, "isCritical": true }
+      }
+    }
+  }
+  ```
+
+### POST /api/algorithms/community-detection
+- 描述：基于任务属性（标签、协作者等）检测任务社区（聚类），用于批量处理或智能分组。
+- 请求体（JSON）：
+  ```json
+  {
+    "tasks": [
+      { "id": "t1", "type": "coding", "duration": 60, "tags": ["frontend"] },
+      { "id": "t2", "type": "coding", "duration": 120, "tags": ["frontend"] }
+    ]
+  }
+  ```
+- 响应：
+  ```json
+  {
+    "success": true,
+    "communities": {
+      "t1": 0,
+      "t2": 0
+    }
+  }
+  ```
+
+### POST /api/algorithms/analyze-energy
+- 描述：分析用户的精力模式（基于历史任务完成情况）。
+- 请求体：无（使用 JWT 中的 userId）。
+- 响应：
+  ```json
+  {
+    "success": true,
+    "periods": [
+      { "start": "09:00", "end": "11:00", "level": "high" },
+      { "start": "14:00", "end": "16:00", "level": "normal" }
+    ]
+  }
+  ```
+
+### POST /api/algorithms/schedule-tasks
+- 描述：完整个人日程安排，综合考虑精力模式、任务优先级和截止日期。
+- 请求体（JSON）：
+  ```json
+  {
+    "tasks": [ ...DDLTask... ],
+    "config": { 
+      "workHours": { "start": "09:00", "end": "18:00" },
+      "preferences": { "highEnergyTaskPriority": true }
+    }
+  }
+  ```
+- 响应：
+  ```json
+  {
+    "success": true,
+    "scheduledTasks": [
+      { "taskId": "t1", "scheduledStart": "...", "scheduledEnd": "..." }
+    ],
+    "metrics": { "utilization": 0.85, "fragmentation": 0.1 }
+  }
+  ```
+
+### POST /api/algorithms/schedule-team-tasks
+- 描述：完整团队任务安排，协调多人时间表。
+- 请求体（JSON）：
+  ```json
+  {
+    "members": [ ...TeamMember... ],
+    "meetingDetails": { ...MeetingRequirement... },
+    "config": { ... }
+  }
+  ```
+- 响应：
+  ```json
+  {
+    "success": true,
+    "result": {
+      "schedule": [ ... ],
+      "adjustments": { ... }
+    }
+  }
+  ```

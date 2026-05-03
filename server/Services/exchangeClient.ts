@@ -2,6 +2,7 @@ import {
     ExchangeService,
     ExchangeVersion,
     WebCredentials,
+    OAuthCredentials,
     Uri,
     WellKnownFolderName,
     SearchFilter,
@@ -29,6 +30,7 @@ import {
     ConflictResolutionMode,
     StringList,
 } from 'ews-javascript-api';
+import axios from 'axios';
 import { ExchangeConfig, IEmail, IEvent } from './types';
 import { logger } from '../Utils/logger.js';
 import moment from 'moment-timezone';
@@ -37,7 +39,8 @@ import { createTodoItem } from './MStodo.js';
 import { User, Task } from '../index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { mcpTools } from './mcp.js';
-import { toShanghaiISO } from '../Utils/time.js';
+import { dbService } from './dbService.js';
+import toShanghaiISO from '../Utils/time.js';
 
 // 以下代码将禁用 SSL/TLS 证书验证。
 // 如果您的 Exchange 服务器使用自签名证书，则需要此设置。
@@ -49,22 +52,201 @@ moment.tz.setDefault("Asia/Shanghai");
 export class ExchangeClient {
     private config: ExchangeConfig;
     private service: ExchangeService;
+    private authMode: 'ews' | 'graph';
     private streamingSubscription: StreamingSubscription | null = null;
     private streamingConnection: StreamingSubscriptionConnection | null = null;
     private healthCheckTimer: NodeJS.Timeout | null = null;
     private llmApi: LLMApi | null = null;
     private user: User | null = null;
     private processedMessageIds: Set<string> = new Set();
+    private tokenRefreshTimer: NodeJS.Timeout | null = null;
 
+    private static readonly GRAPH_BASE_URL = 'https://graph.microsoft.com/v1.0';
+
+    private shouldUseGraphAuth(config: ExchangeConfig): boolean {
+        const normalizedScope = (config.scope || '').toLowerCase();
+        if (normalizedScope.includes('graph.microsoft.com')) {
+            return true;
+        }
+        if (normalizedScope.includes('outlook.office365.com/ews.accessasuser.all')) {
+            return false;
+        }
+        return (process.env.EXCHANGE_AUTH_MODE || '').toLowerCase() === 'graph';
+    }
+
+    private getGraphHeaders() {
+        if (!this.config.oauthToken) {
+            throw new Error('Graph mode requires oauthToken.');
+        }
+        return {
+            Authorization: `Bearer ${this.config.oauthToken}`,
+            'Content-Type': 'application/json'
+        };
+    }
+
+    private toGraphDateTime(dateValue: string): { dateTime: string; timeZone: string } {
+        const iso = new Date(dateValue).toISOString();
+        return {
+            dateTime: iso.replace('Z', ''),
+            timeZone: 'UTC'
+        };
+    }
+
+    private parseGraphDateTime(value?: { dateTime?: string; timeZone?: string }): string {
+        if (!value?.dateTime) return toShanghaiISO();
+        const normalized = value.dateTime.endsWith('Z') ? value.dateTime : `${value.dateTime}Z`;
+        return toShanghaiISO(new Date(normalized).toISOString());
+    }
+
+    private parseEmailFromGraph(message: any, includeBody: boolean): IEmail {
+        return {
+            id: message.id,
+            subject: message.subject || '(无主题)',
+            from: message.from?.emailAddress
+                ? {
+                    name: message.from.emailAddress.name || message.from.emailAddress.address || '',
+                    address: message.from.emailAddress.address || ''
+                }
+                : undefined,
+            receivedAt: toShanghaiISO(message.receivedDateTime || new Date().toISOString()),
+            isRead: !!message.isRead,
+            body: includeBody ? this.cleanHtmlContent(message.body?.content || '') : undefined,
+            hasAttachments: !!message.hasAttachments,
+        };
+    }
+
+    private parseEventFromGraph(event: any): IEvent {
+        const importanceMap: Record<string, 'high' | 'normal' | 'low'> = {
+            high: 'high',
+            normal: 'normal',
+            low: 'low'
+        };
+        return {
+            id: event.id,
+            subject: event.subject || '(无主题)',
+            start: this.parseGraphDateTime(event.start),
+            end: this.parseGraphDateTime(event.end),
+            location: event.location?.displayName || '',
+            body: this.cleanHtmlContent(event.body?.content || ''),
+            attendees: Array.isArray(event.attendees)
+                ? event.attendees
+                    .map((a: any) => a?.emailAddress?.address)
+                    .filter((address: string | undefined): address is string => !!address)
+                : [],
+            importance: importanceMap[(event.importance || 'normal').toLowerCase()] || 'normal',
+            isReminderOn: !!event.isReminderOn,
+        };
+    }
+
+    private async graphGetMessages(top: number, onlyUnread: boolean = false): Promise<IEmail[]> {
+        const query = new URLSearchParams({
+            '$top': String(top),
+            '$orderby': 'receivedDateTime desc',
+            '$select': 'id,subject,from,receivedDateTime,isRead,hasAttachments'
+        });
+        if (onlyUnread) {
+            query.append('$filter', 'isRead eq false');
+        }
+        const response = await axios.get(`${ExchangeClient.GRAPH_BASE_URL}/me/messages?${query.toString()}`, {
+            headers: this.getGraphHeaders()
+        });
+        return (response.data.value || []).map((message: any) => this.parseEmailFromGraph(message, false));
+    }
+
+    private async graphGetMessageById(itemId: string): Promise<IEmail> {
+        const query = new URLSearchParams({
+            '$select': 'id,subject,from,receivedDateTime,isRead,hasAttachments,body,categories'
+        });
+        const response = await axios.get(`${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}?${query.toString()}`, {
+            headers: this.getGraphHeaders()
+        });
+        return this.parseEmailFromGraph(response.data, true);
+    }
+
+    private async graphGetEvents(startDate: string, endDate: string): Promise<IEvent[]> {
+        const query = new URLSearchParams({
+            startDateTime: new Date(startDate).toISOString(),
+            endDateTime: new Date(endDate).toISOString(),
+            '$top': '100',
+            '$select': 'id,subject,start,end,location,body,attendees,importance,isReminderOn',
+            '$orderby': 'start/dateTime'
+        });
+        const response = await axios.get(`${ExchangeClient.GRAPH_BASE_URL}/me/calendarView?${query.toString()}`, {
+            headers: this.getGraphHeaders()
+        });
+        return (response.data.value || []).map((item: any) => this.parseEventFromGraph(item));
+    }
+
+    private startTokenRefresh() {
+        if (!this.config.refreshToken || !this.config.tokenUrl || !this.config.clientId || !this.config.clientSecret) {
+            logger.warn('Token Refresh params missing, skipping auto-refresh setup.');
+            return;
+        }
+
+        // Set interval to refresh token (e.g., every 50 minutes)
+        // Ideally should base on expires_in but 50min is safe for 1h tokens
+        const REFRESH_INTERVAL = 50 * 60 * 1000; 
+        
+        this.tokenRefreshTimer = setInterval(async () => {
+            try {
+                logger.info(`Refreshing Exchange OAuth token for user ${this.user ? this.user.id : 'unknown'}...`);
+                const response = await axios.post(this.config.tokenUrl!, new URLSearchParams({
+                    client_id: this.config.clientId!,
+                    client_secret: this.config.clientSecret!,
+                    grant_type: 'refresh_token',
+                    refresh_token: this.config.refreshToken!,
+                }).toString(), {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+
+                const { access_token, refresh_token, expires_in } = response.data;
+                const expiresAt = Date.now() + ((expires_in || 3600) * 1000);
+
+                // Update local config
+                this.config.oauthToken = access_token;
+                if (refresh_token) this.config.refreshToken = refresh_token;
+
+                // Update credential target based on auth mode
+                if (this.authMode === 'ews') {
+                    this.service.Credentials = new OAuthCredentials(access_token);
+                }
+                
+                // Update User in DB
+                // Fetch fresh user first just in case
+                // Actually we can just update the fields we know
+                if (this.user) {
+                    this.user.ExchangeAccessToken = access_token;
+                    if (refresh_token) this.user.ExchangeRefreshToken = refresh_token;
+                    this.user.ExchangeTokenExpiresAt = expiresAt;
+
+                    await dbService.updateUser(this.user);
+                }
+                // Also update cache in index.ts if possible, but dbService usually handles persistence.
+                // Since user object is passed by reference from index.ts in many cases (userCache), modification here might be enough for memory updates.
+
+                logger.success(`Exchange OAuth token refreshed successfully for user ${this.user ? this.user.id : 'unknown'}`);
+
+            } catch (err: any) {
+                logger.error(`Failed to refresh Exchange token: ${err.message}`);
+                // Don't stop timer, retry next time
+            }
+        }, REFRESH_INTERVAL);
+    }
+    
     constructor(config: ExchangeConfig, user: User) {
         this.config = config;
-        logger.exchange('使用 ews-javascript-api 初始化 Exchange 客户端...');
+        this.user = user;
+        this.authMode = this.shouldUseGraphAuth(config) ? 'graph' : 'ews';
+        logger.exchange('Using ews-javascript-api initializing Exchange Client...');
 
         // 创建 ExchangeService 实例
         this.service = new ExchangeService(ExchangeVersion.Exchange2013_SP1);
 
-        this.user = user;
-        
+        // 如果配置了 refresh token，设置自动刷新
+        if (this.config.refreshToken && this.config.clientId && this.config.clientSecret) {
+             this.startTokenRefresh();
+        }
+
         // 初始化 LLM API 客户端
         if (config.openaiApiKey) {
             this.llmApi = new LLMApi(config.openaiApiKey, config.openaiModel || 'gpt-4o') as LLMApi;
@@ -78,16 +260,29 @@ export class ExchangeClient {
             ? `${this.config.domain}\\${this.config.username}` 
             : this.config.username;
         
-        this.service.Credentials = new WebCredentials(username, this.config.password);
-        
-        // 启用跟踪以进行调试
-        this.service.TraceEnabled = true;
-        this.service.TraceFlags = TraceFlags.All;
-        this.service.TraceListener = {
-            Trace: (traceType: string, traceMessage: string) => {
-                logger.data(`[EWS-TRACE] ${traceType}: ${traceMessage}`);
+        if (this.config.oauthToken) {
+            if (this.authMode === 'ews') {
+                this.service.Credentials = new OAuthCredentials(this.config.oauthToken);
+                logger.exchange('Using OAuth authentication for Exchange (EWS mode).');
+            } else {
+                logger.exchange('Using OAuth authentication for Microsoft Graph delegated mode.');
             }
-        };
+        } else {
+            this.service.Credentials = new WebCredentials(username, this.config.password);
+            logger.data(`使用的用户名 (格式化后): ${username}`);
+            logger.data(`域名: ${this.config.domain || '未设置'}`);
+        }
+        
+        // 启用跟踪以进行调试（仅 EWS 模式）
+        if (this.authMode === 'ews') {
+            this.service.TraceEnabled = true;
+            this.service.TraceFlags = TraceFlags.All;
+            this.service.TraceListener = {
+                Trace: (traceType: string, traceMessage: string) => {
+                    logger.data(`[EWS-TRACE] ${traceType}: ${traceMessage}`);
+                }
+            };
+        }
 
         logger.data(`使用的用户名 (格式化后): ${username}`);
         logger.data(`域名: ${this.config.domain || '未设置'}`);
@@ -117,6 +312,9 @@ export class ExchangeClient {
      * 确保已执行 Autodiscover 并设置了 EWS URL
      */
     private async ensureAutodiscover(): Promise<void> {
+        if (this.authMode === 'graph') {
+            return;
+        }
         if (!this.service.Url) {
             logger.exchange('执行 Autodiscover 或修正配置的 URL 以查找 EWS 端点...');
             try {
@@ -145,6 +343,10 @@ export class ExchangeClient {
     
     // 启动推送通知
     public async startPushNotifications() {
+        if (this.authMode === 'graph') {
+            logger.warn('Graph mode does not support current EWS streaming push; skipping push subscription.');
+            return;
+        }
         try {
             await this.ensureAutodiscover();
             
@@ -617,6 +819,10 @@ export class ExchangeClient {
      * @returns 邮件数组
      */
     async getUnreadEmails(top: number = 10): Promise<IEmail[]> {
+        if (this.authMode === 'graph') {
+            logger.exchange(`Graph模式：开始获取 ${top} 封未读邮件...`);
+            return this.graphGetMessages(top, true);
+        }
         await this.ensureAutodiscover();
         logger.exchange(`开始获取 ${top} 封未读邮件...`);
 
@@ -627,6 +833,12 @@ export class ExchangeClient {
     }
 
     async findEmails(top: number = 10, searchFilter?: SearchFilter): Promise<IEmail[]> {
+        if (this.authMode === 'graph') {
+            if (searchFilter) {
+                logger.warn('Graph模式暂不支持 EWS SearchFilter，已忽略该筛选条件。');
+            }
+            return this.graphGetMessages(top, false);
+        }
         // 创建视图，限制结果数量
         const view = new ItemView(top);
         // 定义要加载的属性（不包含正文，因为Body不能在FindItem请求中使用）
@@ -671,6 +883,10 @@ export class ExchangeClient {
      * @returns 邮件详情
      */
     async getEmailById(itemId: string): Promise<IEmail> {
+        if (this.authMode === 'graph') {
+            logger.exchange(`Graph模式：正在获取 ID 为 ${itemId} 的邮件...`);
+            return this.graphGetMessageById(itemId);
+        }
         await this.ensureAutodiscover();
         logger.exchange(`正在获取 ID 为 ${itemId} 的邮件...`);
         
@@ -725,6 +941,31 @@ export class ExchangeClient {
      * @returns 创建的事件
      */
     async createEvent(eventData: IEvent): Promise<Appointment> {
+        if (this.authMode === 'graph') {
+            logger.exchange(`Graph模式：正在创建日历事件: ${eventData.subject}`);
+            const payload: any = {
+                subject: eventData.subject,
+                body: {
+                    contentType: 'HTML',
+                    content: eventData.body || ''
+                },
+                start: this.toGraphDateTime(eventData.start),
+                end: this.toGraphDateTime(eventData.end),
+                location: eventData.location ? { displayName: eventData.location } : undefined,
+                attendees: (eventData.attendees || []).map((attendee) => ({
+                    emailAddress: { address: attendee },
+                    type: 'required'
+                })),
+                importance: eventData.importance || 'normal',
+                isReminderOn: eventData.isReminderOn
+            };
+
+            const response = await axios.post(`${ExchangeClient.GRAPH_BASE_URL}/me/events`, payload, {
+                headers: this.getGraphHeaders()
+            });
+
+            return response.data as Appointment;
+        }
         await this.ensureAutodiscover();
         logger.exchange(`正在创建日历事件: ${eventData.subject}`);
 
@@ -791,6 +1032,10 @@ export class ExchangeClient {
      * @returns 事件数组
      */
     async getEvents(startDate: string, endDate: string): Promise<IEvent[]> {
+        if (this.authMode === 'graph') {
+            logger.exchange(`Graph模式：正在获取从 ${startDate} 到 ${endDate} 的日历事件...`);
+            return this.graphGetEvents(startDate, endDate);
+        }
         await this.ensureAutodiscover();
         logger.exchange(`正在获取从 ${startDate} 到 ${endDate} 的日历事件...`);
 
@@ -878,6 +1123,13 @@ export class ExchangeClient {
 
     public markSystem = {
     markEmailAsRead : async (itemId: string, state: boolean): Promise<void> => {
+        if (this.authMode === 'graph') {
+            await axios.patch(`${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}`, { isRead: state }, {
+                headers: this.getGraphHeaders()
+            });
+            logger.success(`Graph模式：邮件 ID 为 ${itemId} 已更新已读状态。`);
+            return;
+        }
         await this.ensureAutodiscover();
         logger.exchange(`正在将邮件 ID 为 ${itemId} 标记为已读...`);
         const email = await EmailMessage.Bind(this.service, new ItemId(itemId));
@@ -890,6 +1142,23 @@ export class ExchangeClient {
     @param itemId - 邮件 ID
     */
     addAIReadTagToEmail: async (itemId: string): Promise<void> => {
+        if (this.authMode === 'graph') {
+            const messageRes = await axios.get(`${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}?$select=categories`, {
+                headers: this.getGraphHeaders()
+            });
+            const categories: string[] = Array.isArray(messageRes.data?.categories) ? messageRes.data.categories : [];
+            const aiReadCategory = 'AI已读';
+            if (!categories.includes(aiReadCategory)) {
+                categories.push(aiReadCategory);
+                await axios.patch(`${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}`, { categories }, {
+                    headers: this.getGraphHeaders()
+                });
+                logger.success(`Graph模式：邮件 ID 为 ${itemId} 已增加“AI已读”标签。`);
+            } else {
+                logger.exchange(`Graph模式：邮件 ID 为 ${itemId} 已包含“AI已读”标签，无需重复添加。`);
+            }
+            return;
+        }
         await this.ensureAutodiscover();
         logger.exchange(`正在为邮件 ID 为 ${itemId} 增加“AI已读”标签...`);
         const email = await EmailMessage.Bind(this.service, new ItemId(itemId));
@@ -929,6 +1198,13 @@ export class ExchangeClient {
     @returns 是否已标记为“AI已读”
     */
     isEmailMarkedAsAIRead: async (itemId: string): Promise<boolean> => {
+        if (this.authMode === 'graph') {
+            const response = await axios.get(`${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}?$select=categories`, {
+                headers: this.getGraphHeaders()
+            });
+            const categories: string[] = Array.isArray(response.data?.categories) ? response.data.categories : [];
+            return categories.includes('AI已读');
+        }
         await this.ensureAutodiscover();
         logger.exchange(`正在检查邮件 ID 为 ${itemId} 是否已标记为“AI已读”...`);
         const email = await EmailMessage.Bind(this.service, new ItemId(itemId));

@@ -29,6 +29,14 @@
   white-space: nowrap;
 }
 
+/* App logo next to title */
+.app-logo {
+  width: 28px;
+  height: 28px;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
 .sidebar-toggle {
   background: none;
   border: none;
@@ -216,82 +224,20 @@
 .status-dot.connected { background-color: #48bb78; }
 .status-dot.disconnected { background-color: #f56565; }
 
-/* Restored Dashboard Content Styles */
-.connection-status-section {
-  margin-bottom: 30px;
+.status-loading {
   text-align: center;
+  padding: 32px 24px;
+  color: var(--color-text-light);
+  font-size: 0.875rem;
 }
 
-.status-container {
-  display: flex;
-  justify-content: center;
-  gap: 30px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.status-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 20px;
+.status-error {
+  text-align: center;
+  padding: 24px;
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  background: var(--color-danger-light);
   border-radius: 8px;
-  min-width: 200px;
-  justify-content: space-between;
-  white-space: nowrap; /* Prevent text wrapping */
-}
-
-.status-item.connected {
-  background: #e8f5e9;
-  border: 1px solid #c8e6c9;
-}
-
-.status-item.disconnected {
-  background: #fff3e0;
-  border: 1px solid #ffe0b2;
-}
-
-.status-label {
-  font-weight: 500;
-  color: #333;
-}
-
-.status-value {
-  font-weight: 600;
-}
-
-.status-item.connected .status-value {
-  color: #2e7d32;
-}
-
-.status-item.disconnected .status-value {
-  color: #ef6c00;
-}
-
-.welcome-section {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.fully-connected-content {
-  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-  padding: 30px;
-  border-radius: 12px;
-  border: 2px solid #4caf50;
-  text-align: center;
-}
-
-.fully-connected-content h2 {
-  color: #2e7d32;
-  margin-bottom: 15px;
-}
-
-.partial-connection-content {
-  background: linear-gradient(135deg, #fff8e1 0%, #ffe082 100%);
-  padding: 30px;
-  border-radius: 12px;
-  border: 2px solid #ff9800;
-  text-align: center;
 }
 
 .partial-connection-content h2 {
@@ -479,124 +425,120 @@
   overflow-y: auto;
 }
 
-/* New Dashboard Control Styles */
-.control-section {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid #e2e8f0;
+/* Connection Panel */
+.connection-panel .ui-card-content {
+  padding: 0;
 }
 
-.section-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #4a5568;
-  margin-bottom: 16px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.conn-table {
+  padding: 0 24px;
 }
 
-.action-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.action-card {
+.conn-row {
   display: flex;
   align-items: center;
-  padding: 16px;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.action-card:hover {
-  border-color: #cbd5e0;
-  background-color: #fff;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+.conn-row:last-child {
+  border-bottom: none;
 }
 
-.action-card.danger {
-  background-color: #fff5f5;
-  border-color: #fed7d7;
-}
-
-.action-card.danger:hover {
-  border-color: #fc8181;
-  background-color: #fff;
-}
-
-.action-icon-wrapper {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
+.conn-indicator {
+  width: 32px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 12px;
+}
+
+.conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
-.action-icon-wrapper.sync {
-  background-color: #ebf8ff;
-  color: #3182ce;
+.conn-dot.online {
+  background-color: var(--color-success);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
 }
 
-.action-icon-wrapper.delete {
-  background-color: #fed7d7;
-  color: #e53e3e;
+.conn-dot.offline {
+  background-color: var(--color-neutral-300);
 }
 
-.action-icon-wrapper.microsoft {
-  background-color: #e6fffa;
-  color: #319795;
+.conn-icon {
+  color: var(--color-text-light);
 }
 
-.action-icon-wrapper.ebridge {
-  background-color: #faf5ff;
-  color: #805ad5;
+.conn-icon-danger {
+  color: var(--color-danger);
 }
 
-.action-info {
-  flex-grow: 1;
+.conn-body {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  margin-right: 12px;
+  gap: 2px;
 }
 
-.action-title {
+.conn-label {
+  font-size: 0.875rem;
   font-weight: 600;
-  color: #2d3748;
-  font-size: 0.95rem;
+  color: var(--color-text-dark);
 }
 
-.action-desc {
-  font-size: 0.8rem;
-  color: #718096;
-  margin-top: 2px;
-}
-
-.action-btn {
+.conn-meta {
+  font-size: 0.75rem;
+  color: var(--color-text-light);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.global-actions {
+.conn-state {
+  flex-shrink: 0;
+  margin: 0 16px;
+}
+
+.conn-tag {
+  font-size: 0.75rem;
+  color: var(--color-text-light);
+}
+
+.conn-tag.online {
+  color: var(--color-success);
+  font-weight: 500;
+}
+
+.conn-actions {
+  flex-shrink: 0;
   display: flex;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid #e2e8f0;
+  gap: 8px;
+  align-items: center;
 }
 
-/* Update status item styles for new layout */
-.status-item {
-  justify-content: space-between;
-  padding: 16px;
+.conn-unbind {
+  color: var(--color-text-light) !important;
+  font-size: 0.813rem;
 }
 
-.status-badge {
-  margin-left: auto;
+.conn-unbind:hover {
+  color: var(--color-danger) !important;
+}
+
+.conn-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 0 24px;
+}
+
+.conn-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px;
 }

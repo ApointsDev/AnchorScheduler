@@ -7,31 +7,12 @@ import { broadcastTaskChange } from './websocket';
 import { logUserEvent } from './userLog';
 import { logger } from '../Utils/logger.js';
 import { ExchangeClient } from './exchangeClient';
-import { toShanghaiISO } from '../Utils/time.js';
+import { toShanghaiISO, getAcademicYearStart, getCurrentWeekNumber } from '../Utils/time.js';
+import { getISOWeek, addDays } from 'date-fns';
 
 // Local definitions to avoid circular dependency with index.ts
 import { Task, User } from '../index.js';
 
-
-function getCurrentWeekNumber(): number {
-    const weekOffset = parseInt(process.env.ACADEMIC_WEEK_OFFSET || '0');
-    const academicYearStartMonth = parseInt(process.env.ACADEMIC_YEAR_START_MONTH || '9');
-    const academicYearStartDay = parseInt(process.env.ACADEMIC_YEAR_START_DAY || '1');
-
-    const currentDate = new Date();
-    const year = currentDate.getFullYear();
-    let academicYearStart: Date;
-    if (currentDate.getMonth() >= academicYearStartMonth - 1) {
-        academicYearStart = new Date(year, academicYearStartMonth - 1, academicYearStartDay);
-    } else {
-        academicYearStart = new Date(year - 1, academicYearStartMonth - 1, academicYearStartDay);
-    }
-    const timeDiff = currentDate.getTime() - academicYearStart.getTime();
-    const dayDiff = Math.floor(timeDiff / (1000 * 3600 * 24));
-    const rawWeekNumber = Math.ceil((dayDiff + 1) / 7);
-    const adjustedWeekNumber = rawWeekNumber + weekOffset;
-    return Math.max(1, adjustedWeekNumber);
-}
 
 function parseWeekPattern(pattern: string): number[] {
     const weeks: number[] = [];
@@ -90,83 +71,93 @@ export async function syncUserTimetable(user: User, force: boolean = false): Pro
                 await dbService.updateUser(user);
                 logger.info(`Updated timetableFetchLevel for user ${user.id} to ${envLvl}`);
 
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const nextWeekEnd = new Date(today);
-                nextWeekEnd.setDate(today.getDate() + 7);
+                // Clean up old tasks (both individual and previous root tasks for this timetable)
+                await dbService.deleteTasksByPattern(user.id, `timetable_${hash}_%`);
+                // Refresh user tasks in memory to reflect deletion
+                await dbService.refreshUserTasks(user);
+
+                const academicYearStart = getAcademicYearStart();
+                const currentWeekNumber = getCurrentWeekNumber();
 
                 for (const activity of response.data) {
                     try {
                         const weeks = parseWeekPattern(activity.weekPattern || '');
+                        if (weeks.length === 0) continue;
+
                         const apiDay = activity.scheduledDay ? parseInt(activity.scheduledDay) : 0;
-                        const scheduledDay = apiDay === 6 ? 0 : apiDay + 1;
-                        const startTimeObj = activity.startTime ? new Date(activity.startTime) : new Date();
-                        const endTimeObj = activity.endTime ? new Date(activity.endTime) : new Date(Date.now() + 3600000);
-                        const currentDayOfWeek = today.getDay();
-                        let thisWeekCourseDate = new Date(today);
-                        const daysDifference = scheduledDay - currentDayOfWeek;
-                        if (daysDifference > 0) thisWeekCourseDate.setDate(today.getDate() + daysDifference);
-                        else if (daysDifference === 0) { /* today */ }
-                        else thisWeekCourseDate.setDate(today.getDate() + daysDifference);
+                        const scheduledDay = apiDay === 6 ? 0 : apiDay + 1; // 0=Sun, 1=Mon...
+                        
+                        const isoWeeks: number[] = [];
+                        let firstInstanceDate: Date | null = null;
 
-                        const potentialCourseDates: Date[] = [];
-                        if (thisWeekCourseDate >= today && thisWeekCourseDate <= nextWeekEnd) potentialCourseDates.push(thisWeekCourseDate);
-                        const nextWeekCourseDate = new Date(thisWeekCourseDate);
-                        nextWeekCourseDate.setDate(thisWeekCourseDate.getDate() + 7);
-                        if (nextWeekCourseDate <= nextWeekEnd) potentialCourseDates.push(nextWeekCourseDate);
-
-                        for (const courseDate of potentialCourseDates) {
-                            const courseStartTime = new Date(courseDate);
-                            courseStartTime.setHours(startTimeObj.getHours(), startTimeObj.getMinutes(), startTimeObj.getSeconds());
-                            const courseEndTime = new Date(courseDate);
-                            courseEndTime.setHours(endTimeObj.getHours(), endTimeObj.getMinutes(), endTimeObj.getSeconds());
-                            if (courseStartTime >= today) {
-                                const taskId = `timetable_${hash}_${activity.identity || uuidv4()}_${toShanghaiISO(courseDate).split('T')[0]}`;
-                                const existingTask = user.tasks.find(t => t.id === taskId);
-                                if (!existingTask) {
-                                    const currentWeekNumber = getCurrentWeekNumber();
-                                    const newTask: Task = {
-                                        id: taskId,
-                                        name: activity.name || `${activity.moduleId || 'Unknown'} - ${activity.activityType || 'Activity'}`,
-                                        description: `Staff: ${activity.staff || 'Unknown'}\nLocation: ${activity.location || 'Online'}\nWeek Pattern: ${activity.weekPattern || 'N/A'}\nCurrent Week: ${currentWeekNumber}\nDay: ${getDayName(scheduledDay)}`,
-                                        dueDate: toShanghaiISO(courseDate),
-                                        startTime: toShanghaiISO(courseStartTime),
-                                        endTime: toShanghaiISO(courseEndTime),
-                                        location: activity.location || undefined,
-                                        completed: false,
-                                        pushedToMSTodo: false,
-                                        scheduleType: 'single',
-                                        body: JSON.stringify(activity),
-                                    };
-                                    try {
-                                        const conflicts = findConflictingTasks(user.tasks, newTask, { boundaryConflict: !!user.conflictBoundaryInclusive });
-
-                                        await dbService.addTask(user.id, newTask, !!user.conflictBoundaryInclusive, true);
-                                        broadcastTaskChange('created', newTask, user.id);
-                                        await dbService.refreshUserTasksIncremental(user, { addedIds: [newTask.id] });
-
-                                        if (conflicts.length > 0) {
-                                            logger.warn(`Added conflicting timetable task ${newTask.id} for user ${user.id} with warning`);
-                                            await logUserEvent(user.id, 'taskConflictWarning', `Added conflicting timetable task with warning: ${newTask.name}`, { id: newTask.id, conflicts: conflicts.map(c => c.id) });
-                                        } else {
-                                            logger.info(`Added timetable task: ${newTask.name} on ${courseDate.toLocaleDateString()} (Week: ${currentWeekNumber}) for user ${user.id}`);
-                                            await logUserEvent(user.id, 'taskCreated', `Created timetable task ${newTask.name}`, { id: newTask.id, startTime: newTask.startTime, endTime: newTask.endTime });
-                                        }
-                                        addedCount++;
-                                    } catch (e: any) {
-                                        logger.error(`Failed to add timetable task ${newTask.id} for user ${user.id}:`, e);
-                                        await logUserEvent(user.id, 'taskError', `Failed to add timetable task ${newTask.name}`, { id: newTask.id, error: (e as any)?.message });
-                                        errorCount++;
+                        for (const weekNum of weeks) {
+                            // Calculate start of Academic Week
+                            const weekStart = addDays(academicYearStart, (weekNum - 1) * 7);
+                            
+                            // Find the specific day in this week
+                            for (let i = 0; i < 7; i++) {
+                                const d = addDays(weekStart, i);
+                                if (d.getDay() === scheduledDay) {
+                                    isoWeeks.push(getISOWeek(d));
+                                    if (!firstInstanceDate) {
+                                        firstInstanceDate = d;
                                     }
+                                    break;
                                 }
                             }
                         }
+
+                        if (!firstInstanceDate || isoWeeks.length === 0) continue;
+
+                        const startTimeObj = activity.startTime ? new Date(activity.startTime) : new Date();
+                        const endTimeObj = activity.endTime ? new Date(activity.endTime) : new Date(Date.now() + 3600000);
+
+                        // Set time for first instance
+                        const rootStartTime = new Date(firstInstanceDate);
+                        rootStartTime.setHours(startTimeObj.getHours(), startTimeObj.getMinutes(), startTimeObj.getSeconds());
+                        
+                        const rootEndTime = new Date(firstInstanceDate);
+                        rootEndTime.setHours(endTimeObj.getHours(), endTimeObj.getMinutes(), endTimeObj.getSeconds());
+
+                        const taskId = `timetable_${hash}_${activity.identity || uuidv4()}`;
+                        
+                        const recurrenceRule = JSON.stringify({
+                            freq: 'weeklyByWeekNumber',
+                            weeks: isoWeeks,
+                            interval: 1
+                        });
+
+                        const newTask: Task = {
+                            id: taskId,
+                            name: activity.name || `${activity.moduleId || 'Unknown'} - ${activity.activityType || 'Activity'}`,
+                            description: `Staff: ${activity.staff || 'Unknown'}\nLocation: ${activity.location || 'Online'}\nWeek Pattern: ${activity.weekPattern || 'N/A'}\nDay: ${getDayName(scheduledDay)}`,
+                            dueDate: toShanghaiISO(rootEndTime),
+                            startTime: toShanghaiISO(rootStartTime),
+                            endTime: toShanghaiISO(rootEndTime),
+                            location: activity.location || undefined,
+                            completed: false,
+                            pushedToMSTodo: false,
+                            scheduleType: 'recurring_weekly_by_week_number',
+                            recurrenceRule: recurrenceRule,
+                            body: JSON.stringify(activity),
+                            importance: 'normal'
+                        };
+
+                        await dbService.addTask(user.id, newTask, !!user.conflictBoundaryInclusive, true);
+                        broadcastTaskChange('created', newTask, user.id);
+                        
+                        logger.info(`Added timetable root task: ${newTask.name} for user ${user.id}`);
+                        await logUserEvent(user.id, 'taskCreated', `Created timetable root task ${newTask.name}`, { id: newTask.id });
+                        
+                        addedCount++;
                     } catch (parseError) {
                         logger.error(`Error processing activity ${activity.identity || 'unknown'}:`, parseError);
                         await logUserEvent(user.id, 'timetableParseError', `Failed to process timetable activity`, { activityId: activity.identity || 'unknown', error: (parseError as any)?.message });
                         errorCount++;
                     }
                 }
+                // Refresh user tasks after adding all
+                await dbService.refreshUserTasks(user);
             } else {
                 logger.warn(`Failed to fetch timetable for user ${user.id}`);
                 await logUserEvent(user.id, 'timetableError', `Failed to fetch timetable`, {});

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getTasks, type Task } from '../../services/api';
-import { useWeek } from '../../context/WeekContext';
-import { format, startOfWeek, endOfWeek, addDays, startOfMonth, endOfMonth, isSameMonth, isSameDay, parseISO, addMonths, subMonths, differenceInCalendarWeeks } from 'date-fns';
+// import { useWeek } from '../../context/WeekContext';
+import { format, startOfWeek, endOfWeek, addDays, startOfMonth, endOfMonth, isSameMonth, isSameDay, parseISO, addMonths, subMonths,  } from 'date-fns';
 import { toShanghaiISO } from '../../utils/time';
 import { zhCN } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, Plus } from 'lucide-react';
@@ -20,15 +20,15 @@ const AllSchedule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const { weekInfo } = useWeek();
-  const effectiveWeek = weekInfo ? weekInfo.effectiveWeek : null;
+  // const { weekInfo } = useWeek();
+  // const effectiveWeek = weekInfo ? weekInfo.effectiveWeek : null;
 
   // Compute week number for the currently displayed `currentDate` by applying
   // the same offsets to the rawWeekNumber and shifting by calendar week difference
   // relative to today. This allows the UI to show the week for the viewed date.
-  const displayedWeek = weekInfo
-    ? (weekInfo.rawWeekNumber + differenceInCalendarWeeks(currentDate, new Date(), { weekStartsOn: 1 }) + (weekInfo.globalWeekOffset || 0) + (weekInfo.userWeekOffset || 0))
-    : null;
+  // const displayedWeek = weekInfo
+  //   ? (weekInfo.rawWeekNumber + differenceInCalendarWeeks(currentDate, new Date(), { weekStartsOn: 1 }) + (weekInfo.globalWeekOffset || 0) + (weekInfo.userWeekOffset || 0))
+  //   : null;
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
@@ -78,16 +78,29 @@ const AllSchedule: React.FC = () => {
     const startDate = startOfWeek(currentDate, { weekStartsOn: 1 });
     const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(startDate, i));
 
+    // 判断是否为移动端（宽度小于 768）
+    const isMobile = window.innerWidth < 768;
+    // 中文周几映射
+    const weekDayMap = ['一', '二', '三', '四', '五', '六', '日'];
     return (
       <div className="week-view-layout">
         <div className="week-view-header">
           <div className="time-axis-header"></div>
-          {weekDays.map(day => (
-            <div key={day.toString()} className={`week-header-day ${isSameDay(day, new Date()) ? 'today' : ''}`}>
-              <div className="week-day-name">{format(day, 'EEE', { locale: zhCN })}</div>
-              <div className="week-day-date">{format(day, 'd')}</div>
-            </div>
-          ))}
+          {weekDays.map(day => {
+            const weekDayIndex = day.getDay() === 0 ? 6 : day.getDay() - 1; // 周日为最后
+            return (
+              <div key={day.toString()} className={`week-header-day ${isSameDay(day, new Date()) ? 'today' : ''}`}>
+                <div className="week-day-name">
+                  {isMobile
+                    ? `周${weekDayMap[weekDayIndex]}`
+                    : format(day, 'EEE', { locale: zhCN })}
+                </div>
+                {!isMobile && (
+                  <div className="week-day-date">{format(day, 'd')}</div>
+                )}
+              </div>
+            );
+          })}
         </div>
         <div className="week-view-body">
           <div className="time-axis">
@@ -241,9 +254,9 @@ const AllSchedule: React.FC = () => {
         <CardHeader className="schedule-header">
           <div className="header-left">
             <CardTitle className="all-schedule-title">全部日程</CardTitle>
-            {effectiveWeek !== null && (
+            {/* {effectiveWeek !== null && (
               <div className="week-badge">第 {effectiveWeek} 周</div>
-            )}
+            )} */}
             <div className="view-controls">
               <ViewToggle
                 value={viewMode}
@@ -261,9 +274,9 @@ const AllSchedule: React.FC = () => {
               <Button variant="ghost" size="sm" onClick={() => navigate('prev')}><ChevronLeft size={20} /></Button>
               <Button variant="outline" size="sm" onClick={() => navigate('today')}>
                 今天
-                {displayedWeek !== null && (
+                {/* {displayedWeek !== null && (
                   <span className="today-week-badge"> · 第 {displayedWeek} 周</span>
-                )}
+                )} */}
               </Button>
               <span className="current-date-label">
                 {format(currentDate, 'yyyy年MM月', { locale: zhCN })}
