@@ -8,7 +8,7 @@ import {
   unbindSmtp,
   removeToken, 
   getToken,
-  updateEbridgePassword,
+  saveEbridgeTimetableUrl,
   getMicrosoftTodoStatus,
   getEbridgeStatus,
   syncTimetable,
@@ -54,12 +54,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
   });
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < getMobileBreakpoint());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [ebPassword, setEbPassword] = useState('');
-  const [password, setPassword] = useState('');
   const [email] = useState(localStorage.getItem('user_email') || '');
   const [XJTLUaccount, setXJTLUaccount] = useState(localStorage.getItem('user_XJTLUaccount') || '');
   const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [msTodoStatus, setMsTodoStatus] = useState<MicrosoftTodoStatus | null>(null);
   const [ebridgeStatus, setEbridgeStatus] = useState<EbridgeStatus | null>(null);
@@ -70,7 +67,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
   const [syncLoading, setSyncLoading] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
-  const [showEbridgeConnectModal, setShowEbridgeConnectModal] = useState(false);
   const [resultModalData, setResultModalData] = useState({ title: '', message: '', isError: false });
   const { weekInfo, setCurrentWeek } = useWeek();
   const [desiredWeek, setDesiredWeek] = useState<number | ''>('');
@@ -79,6 +75,50 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
   const [showWeekModal, setShowWeekModal] = useState(false);
   const [showExchangeConnectModal, setShowExchangeConnectModal] = useState(false);
   const [exchangeEmail, setExchangeEmail] = useState(localStorage.getItem('user_XJTLUaccount') || '');
+  const [ebridgePopup, setEbridgePopup] = useState<Window | null>(null);
+  const [ebridgePopupError, setEbridgePopupError] = useState('');
+
+  const openEbridgePopup = () => {
+    setEbridgePopupError('');
+    const popup = window.open('/api/ebridge/proxy/eb/', 'ebridge_timetable', 'width=1024,height=768');
+    if (!popup) {
+      setEbridgePopupError('弹窗被浏览器拦截，请允许本站弹窗后重试');
+      return;
+    }
+    setEbridgePopup(popup);
+  };
+
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'EBRIDGE_TIMETABLE' && event.data.url) {
+        saveEbridgeTimetableUrl(event.data.url)
+          .then(() => {
+            setMessage('课表链接已成功获取！');
+            setTimeout(() => setMessage(''), 2000);
+            handleRefreshStatus();
+          })
+          .catch((err) => {
+            setEbridgePopupError(err.message || '保存失败');
+          })
+          .finally(() => {
+            if (ebridgePopup && !ebridgePopup.closed) {
+              ebridgePopup.close();
+            }
+            setEbridgePopup(null);
+          });
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [ebridgePopup]);
+
+  useEffect(() => {
+    return () => {
+      if (ebridgePopup && !ebridgePopup.closed) {
+        ebridgePopup.close();
+      }
+    };
+  }, [ebridgePopup]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -231,29 +271,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
       }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
-    setLoading(true);
-
-    try {
-      await updateEbridgePassword({ email, XJTLUaccount, ebPassword, password });
-      setMessage('密码更新成功，请等待处理。eb状态需要等待一会才能刷新。如果2分钟后仍未成功，请重试');
-      setEbPassword('');
-      setPassword('');
-      
-      // 更新密码后刷新Ebridge状态
-      const newStatus = await getEbridgeStatus();
-      setEbridgeStatus(newStatus);
-      setShowEbridgeConnectModal(false);
-    } catch (err: any) {
-      setError(err.message || '密码更新失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleLogout = () => {
     removeToken();
     localStorage.removeItem('user_email');
@@ -384,7 +401,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                 <span className="conn-label">Exchange 邮箱</span>
                 <span className="conn-meta">
                   {ebridgeStatus?.exchangeBinded
-                    ? ebridgeStatus?.exchangeEmail || '已绑定'
+                    ? '已绑定'
                     : 'XJTLU 学校邮箱'}
                 </span>
               </div>
@@ -443,7 +460,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
               </div>
               <div className="conn-actions">
                 {!ebridgeStatus?.connected && (
-                  <Button onClick={() => setShowEbridgeConnectModal(true)} variant="primary" size="sm">连接</Button>
+                  <Button onClick={openEbridgePopup} variant="primary" size="sm">连接</Button>
                 )}
               </div>
             </div>
@@ -568,51 +585,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
 
         {renderConnectionStatus()}
 
-        <Modal
-          isOpen={showEbridgeConnectModal}
-          onClose={() => setShowEbridgeConnectModal(false)}
-          title="连接 Ebridge 教务系统"
-        >
-          {message && <div className="success-message">{message}</div>}
-          {error && <div className="error-message">{error}</div>}
-          <form onSubmit={handleUpdatePassword}>
-            <Input
-              label="XJTLU 账号"
-              type="text"
-              id="XJTLUaccount"
-              value={XJTLUaccount}
-              onChange={(e) => setXJTLUaccount(e.target.value)}
-              required
-              placeholder="例如: san.zhang23"
-            />
-            <Input
-              label="Ebridge 密码"
-              type="password"
-              id="ebPassword"
-              value={ebPassword}
-              onChange={(e) => setEbPassword(e.target.value)}
-              required
-              placeholder="请输入您的 Ebridge 登录密码"
-            />
-            <Input
-              label="平台登录密码"
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="请输入本平台的登录密码以验证身份"
-            />
-            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <Button type="button" variant="secondary" onClick={() => setShowEbridgeConnectModal(false)}>
-                取消
-              </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? '连接中...' : '确认连接'}
-              </Button>
-            </div>
-          </form>
-        </Modal>
+        {ebridgePopupError && <div className="error-message" style={{marginTop: '16px'}}>{ebridgePopupError}</div>}
+        {message && <div className="success-message" style={{marginTop: '16px'}}>{message}</div>}
       </div>
     );
   };

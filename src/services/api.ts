@@ -198,27 +198,19 @@ export const unbindSmtp = async (): Promise<void> => {
     }
 };
 
-// 更新Ebridge密码
-export interface UpdatePasswordData {
-  email: string;
-  XJTLUaccount: string;
-  ebPassword: string;
-  password: string;
-}
-
-export const updateEbridgePassword = async (data: UpdatePasswordData): Promise<void> => {
-  const response = await customFetch(`${API_BASE_URL}/updateEbridgePassword`, {
+export const saveEbridgeTimetableUrl = async (timetableUrl: string): Promise<void> => {
+  const response = await customFetch(`${API_BASE_URL}/api/ebridge/save-url`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${getToken()}`,
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify({ timetableUrl }),
   });
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.error || '密码更新失败');
+    throw new Error(error.error || '保存课表 URL 失败');
   }
 }
 

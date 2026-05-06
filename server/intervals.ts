@@ -2,7 +2,6 @@ import axios from 'axios';
 import moment from 'moment';
 import { toShanghaiISO } from './Utils/time.js';
 import { v4 as uuidv4 } from 'uuid';
-import { Options, PythonShell } from 'python-shell';
 import { ExchangeClient } from './Services/exchangeClient';
 import { ImapClient } from './Services/imapClient';
 import { LLMApi } from './Services/LLMApi';
@@ -323,49 +322,9 @@ export function startIntervals(getUsers: () => IterableIterator<User>): Interval
         logger.debug('Checked all users for Ebridge status');
     }, 20000);
 
-    // Interval 2: 后台检查 ebridge 连接并获取 timetableUrl
-    const interval2 = setInterval(() => {
-        for (const user of getUsers()) {
-            if ((!user.timetableUrl) && user.XJTLUPassword) {
-                console.log('Starting Ebridge connection check for user', user.XJTLUPassword);
-                (async () => {
-                    try {
-                        const pythonScriptPath = './server/Services/ebEmulator/ebridge.py';
-                        logger.info(`Executing Python script to check Ebridge connection for user ${user.id}`);
-                        const options = {
-                            mode: 'text',
-                            pythonPath: '/www/server/pyporject_evn/AnchorSchedule/bin/python3.12',
-                            pythonOptions: ['-u'],
-                            args: [user.XJTLUaccount, user.XJTLUPassword]
-                        } as Options;
-
-                        const timetableUrl = await PythonShell.run(pythonScriptPath, options).then((results: string[]) => {
-                            logger.info(`Python script output for user ${user.id}: ${results}`);
-                            if (results && results.length > 0) {
-                                const output = results[0];
-                                if (output && output.startsWith('http')) return output;
-                                throw new Error(`Invalid timetable URL returned: ${output}`);
-                            } else {
-                                throw new Error('No output returned from Python script');
-                            }
-                        });
-
-                        user.timetableUrl = timetableUrl as string;
-                        user.ebridgeBinded = true;
-                        await dbService.updateUser(user);
-                        logger.success(`Successfully connected to Ebridge for user ${user.id}, timetable URL: ${timetableUrl}`);
-                    } catch (error) {
-                        logger.error('Ebridge connection check failed for user ' + (user?.id || 'unknown') + ':', error);
-                    }
-                })();
-            }
-        }
-    }, 50000);
-
     return {
         stop() {
             clearInterval(interval1);
-            clearInterval(interval2);
         }
     };
 }

@@ -182,12 +182,12 @@ export class Logger {
     if (maxFiles) this.maxFiles = maxFiles;
     
     this.ensureLogDirectoryExists();
-    console.log(`📝 文件日志已启用，日志文件路径: ${this.logFilePath}`);
+    console.log(`文件日志已启用，日志文件路径: ${this.logFilePath}`);
   }
 
   public disableFileLogging(): void {
     this.logToFile = false;
-    console.log('📝 文件日志已禁用');
+    console.log('文件日志已禁用');
   }
 
   public isFileLoggingEnabled(): boolean {
@@ -200,91 +200,91 @@ export class Logger {
 
   public debug(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.DEBUG) {
-      console.log(`🐛 [DEBUG] ${message}`, ...args);
+      console.log(`[DEBUG] ${message}`, ...args);
       this.writeToFile('DEBUG', message, ...args);
     }
   }
 
   public info(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.INFO) {
-      console.log(`ℹ️ [INFO] ${message}`, ...args);
+      console.log(`[INFO] ${message}`, ...args);
       this.writeToFile('INFO', message, ...args);
     }
   }
 
   public warn(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.WARN) {
-      console.warn(`⚠️ [WARN] ${message}`, ...args);
+      console.warn(`[WARN] ${message}`, ...args);
       this.writeToFile('WARN', message, ...args);
     }
   }
 
   public error(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.ERROR) {
-      console.error(`❌ [ERROR] ${message}`, ...args);
+      console.error(`[ERROR] ${message}`, ...args);
       this.writeToFile('ERROR', message, ...args);
     }
   }
 
   public success(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.INFO) {
-      console.log(`✅ [SUCCESS] ${message}`, ...args);
+      console.log(`[SUCCESS] ${message}`, ...args);
       this.writeToFile('SUCCESS', message, ...args);
     }
   }
 
   public start(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.INFO) {
-      console.log(`🚀 [START] ${message}`, ...args);
+      console.log(`[START] ${message}`, ...args);
       this.writeToFile('START', message, ...args);
     }
   }
 
   public step(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.DEBUG) {
-      console.log(`📋 [STEP] ${message}`, ...args);
+      console.log(`[STEP] ${message}`, ...args);
       this.writeToFile('STEP', message, ...args);
     }
   }
 
   public data(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.DEBUG) {
-      console.log(`📊 [DATA] ${message}`, ...args);
+      console.log(`[DATA] ${message}`, ...args);
       this.writeToFile('DATA', message, ...args);
     }
   }
 
   public network(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.DEBUG) {
-      console.log(`🌐 [NETWORK] ${message}`, ...args);
+      console.log(`[NETWORK] ${message}`, ...args);
       this.writeToFile('NETWORK', message, ...args);
     }
   }
 
   public exchange(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.INFO) {
-      console.log(`📧 [EXCHANGE] ${message}`, ...args);
+      console.log(`[EXCHANGE] ${message}`, ...args);
       this.writeToFile('EXCHANGE', message, ...args);
     }
   }
 
   public graph(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.INFO) {
-      console.log(`🔗 [GRAPH] ${message}`, ...args);
+      console.log(`[GRAPH] ${message}`, ...args);
       this.writeToFile('GRAPH', message, ...args);
     }
   }
 
   public auth(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.INFO) {
-      console.log(`🔐 [AUTH] ${message}`, ...args);
+      console.log(`[AUTH] ${message}`, ...args);
       this.writeToFile('AUTH', message, ...args);
     }
   }
 
   public mcp(message: string, ...args: any[]): void {
     if (this.level <= LogLevel.INFO) {
-      console.log(`🔧 [MCP] ${message}`, ...args);
+      console.log(`[MCP] ${message}`, ...args);
       this.writeToFile('MCP', message, ...args);
     }
   }

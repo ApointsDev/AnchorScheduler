@@ -11,7 +11,7 @@ import { dbService } from './Services/dbService';
 import moment from 'moment';
 import { initializeApiRoutes } from './routes/apiRoutes';
 import { initializeAlgorithmRoutes } from './routes/algorithmRoutes';
-import { Options, PythonShell } from 'python-shell';
+import ebridgeRoutes from './routes/ebridgeRoutes';
 import { ExchangeConfig, TimetableActivity, ScheduleType } from './Services/types';
 import { ScheduleConflictError } from './Services/scheduleConflict';
 import { initWebSocket, broadcastTaskChange, broadcastUserLog } from './Services/websocket';
@@ -774,6 +774,23 @@ app.use('/api', apiRouter);
 const algorithmRouter = initializeAlgorithmRoutes(authenticateToken);
 app.use('/api/algorithms', algorithmRouter);
 
+// Ebridge 代理路由
+app.use('/api/ebridge', ebridgeRoutes);
+
+// Ebridge 保存课表 URL
+app.post('/api/ebridge/save-url', authenticateToken, async (req: any, res: any) => {
+    const user = req.user as User;
+    const { timetableUrl } = req.body || {};
+    if (!timetableUrl || typeof timetableUrl !== 'string' || !timetableUrl.startsWith('http')) {
+        return res.status(400).json({ error: 'Invalid timetable URL' });
+    }
+    user.timetableUrl = timetableUrl;
+    user.ebridgeBinded = true;
+    await dbService.updateUser(user);
+    userCache.set(user.id, user);
+    res.json({ success: true });
+});
+
 // Initialize MCP Routes
 initializeMcpRoutes(app, authenticateToken);
 
@@ -837,32 +854,6 @@ app.post('/register', async (req, res) => {
     } catch (error) {
         logger.error('Registration error:', error);
         return res.status(500).json({ error: 'Failed to register user' });
-    }
-});
-
-app.post('/updateEbridgePassword', async (req, res) => {
-    const { email, ebPassword, password, XJTLUaccount } = req.body || {};
-    if (!email || !ebPassword || !password || !XJTLUaccount) return res.status(400).json({ error: 'email, ebridgePassword, Password and XJTLUaccount required' });
-
-    try {
-        const user = await findUserByEmail(email);
-        if (!user || !user.passwordHash) return res.status(401).json({ error: 'invalid credentials' });
-
-        const ok = await bcrypt.compare(password, user.passwordHash);
-        if (!ok) return res.status(401).json({ error: 'invalid credentials' });
-
-        user.XJTLUaccount = XJTLUaccount;
-        user.XJTLUPassword = ebPassword;
-        user.ebridgeBinded = true;
-
-        // 更新数据库和缓存
-        await dbService.updateUser(user);
-        userCache.set(user.id, user);
-
-        return res.status(200).json({ message: 'ebPassword updated' });
-    } catch (error) {
-        logger.error('Update ebridge password error:', error);
-        return res.status(500).json({ error: 'Failed to update ebridge password' });
     }
 });
 
