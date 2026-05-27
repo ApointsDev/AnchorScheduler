@@ -1,8 +1,8 @@
-import { ImapFlow } from 'imapflow';
-import { simpleParser } from 'mailparser';
-import { IEmail } from './types';
-import { logger } from '../Utils/logger.js';
-import toShanghaiISO from '../Utils/time.js';
+import { ImapFlow } from "imapflow";
+import { simpleParser } from "mailparser";
+import { IEmail } from "./types";
+import { logger } from "../Utils/logger.js";
+import toShanghaiISO from "../Utils/time.js";
 
 export interface ImapConfig {
     host: string;
@@ -10,6 +10,7 @@ export interface ImapConfig {
     tls: boolean;
     username: string;
     password: string;
+    useOAuth?: boolean; // 使用 XOAUTH2 认证（CAF OIDC token）
 }
 
 export type ImapNewEmailCallback = (email: IEmail) => Promise<void>;
@@ -25,7 +26,9 @@ export class ImapClient {
 
     constructor(config: ImapConfig) {
         this.config = config;
-        logger.info(`IMAP client configured for ${config.username}@${config.host}:${config.port} (TLS: ${config.tls})`);
+        logger.info(
+            `IMAP client configured for ${config.username}@${config.host}:${config.port} (TLS: ${config.tls})`,
+        );
     }
 
     private async ensureConnected(): Promise<void> {
@@ -33,21 +36,32 @@ export class ImapClient {
             return;
         }
 
+        // CAF OIDC 用户使用 XOAUTH2 认证
+        const auth: any = this.config.useOAuth
+            ? {
+                  user: this.config.username,
+                  accessToken: this.config.password,
+              }
+            : {
+                  user: this.config.username,
+                  pass: this.config.password,
+              };
+
         this.client = new ImapFlow({
             host: this.config.host,
             port: this.config.port,
             secure: this.config.tls,
-            auth: {
-                user: this.config.username,
-                pass: this.config.password,
-            },
+            auth,
             logger: false,
             connectionTimeout: 10000,
             greetingTimeout: 15000,
             socketTimeout: 120000,
         });
 
-        logger.info(`正在连接 IMAP 服务器: ${this.config.host}:${this.config.port}`);
+        const authMethod = this.config.useOAuth ? "XOAUTH2" : "password";
+        logger.info(
+            `正在连接 IMAP 服务器 (${authMethod}): ${this.config.host}:${this.config.port}`,
+        );
         await this.client.connect();
         logger.success(`IMAP 连接成功: ${this.config.host}`);
     }
@@ -60,33 +74,43 @@ export class ImapClient {
         try {
             await this.ensureConnected();
 
-            const mailbox = await this.client!.mailboxOpen('INBOX');
-            logger.info(`IMAP IDLE 开始监听 INBOX，当前消息数: ${mailbox.exists}`);
+            const mailbox = await this.client!.mailboxOpen("INBOX");
+            logger.info(
+                `IMAP IDLE 开始监听 INBOX，当前消息数: ${mailbox.exists}`,
+            );
 
-            this.client!.on('exists', (event) => {
-                if (event.path.toUpperCase() === 'INBOX') {
+            this.client!.on("exists", (event) => {
+                if (event.path.toUpperCase() === "INBOX") {
                     const newCount = event.count - event.prevCount;
-                    logger.info(`IMAP IDLE 检测到新邮件，INBOX: ${event.prevCount} -> ${event.count} (+${newCount})`);
+                    logger.info(
+                        `IMAP IDLE 检测到新邮件，INBOX: ${event.prevCount} -> ${event.count} (+${newCount})`,
+                    );
                     this.handleNewMessages().catch((err) => {
-                        logger.error(`处理新邮件时出错: ${err.message || '未知错误'}`);
+                        logger.error(
+                            `处理新邮件时出错: ${err.message || "未知错误"}`,
+                        );
                     });
                 }
             });
 
-            this.client!.on('close', () => {
+            this.client!.on("close", () => {
                 this.idleRunning = false;
                 if (this.shouldStop) return;
                 logger.warn(`IMAP 连接断开，10秒后重连...`);
                 this.reconnectTimer = setTimeout(() => {
                     this.startIdle(this.onNewEmail!).catch((err) => {
-                        logger.error(`IMAP IDLE 重连失败: ${err.message || '未知错误'}`);
+                        logger.error(
+                            `IMAP IDLE 重连失败: ${err.message || "未知错误"}`,
+                        );
                     });
                 }, 10000);
             });
         } catch (error: any) {
             this.idleRunning = false;
             if (this.shouldStop) return;
-            logger.error(`IMAP IDLE 启动失败: ${error.message || '未知错误'}, 10秒后重试...`);
+            logger.error(
+                `IMAP IDLE 启动失败: ${error.message || "未知错误"}, 10秒后重试...`,
+            );
             if (!this.shouldStop) {
                 this.reconnectTimer = setTimeout(() => {
                     this.startIdle(this.onNewEmail!).catch(() => {});
@@ -100,10 +124,15 @@ export class ImapClient {
         try {
             await this.ensureConnected();
 
-            const lock = await this.client!.getMailboxLock('INBOX');
+            const lock = await this.client!.getMailboxLock("INBOX");
             try {
                 const mailbox = this.client!.mailbox;
-                const totalCount = (mailbox && typeof mailbox === 'object' && 'exists' in mailbox) ? mailbox.exists : 0;
+                const totalCount =
+                    mailbox &&
+                    typeof mailbox === "object" &&
+                    "exists" in mailbox
+                        ? mailbox.exists
+                        : 0;
                 if (totalCount === 0) return;
 
                 const limit = Math.min(10, totalCount);
@@ -111,11 +140,14 @@ export class ImapClient {
                 const range = `${startSeq}:*`;
 
                 const uidsToFetch: number[] = [];
-                for await (const msg of this.client!.fetch(
-                    range,
-                    { uid: true, flags: true },
-                )) {
-                    if (msg.uid && !this.processedMessageIds.has(String(msg.uid))) {
+                for await (const msg of this.client!.fetch(range, {
+                    uid: true,
+                    flags: true,
+                })) {
+                    if (
+                        msg.uid &&
+                        !this.processedMessageIds.has(String(msg.uid))
+                    ) {
                         uidsToFetch.push(msg.uid);
                     }
                 }
@@ -126,14 +158,18 @@ export class ImapClient {
                         this.processedMessageIds.add(fullEmail.id);
                         await this.onNewEmail(fullEmail);
                     } catch (err: any) {
-                        logger.error(`获取 IMAP 邮件 UID=${uid} 详情失败: ${err.message || '未知错误'}`);
+                        logger.error(
+                            `获取 IMAP 邮件 UID=${uid} 详情失败: ${err.message || "未知错误"}`,
+                        );
                     }
                 }
             } finally {
                 lock.release();
             }
         } catch (error: any) {
-            logger.error(`IDLE 处理新邮件时出错: ${error.message || '未知错误'}`);
+            logger.error(
+                `IDLE 处理新邮件时出错: ${error.message || "未知错误"}`,
+            );
         }
     }
 
@@ -141,29 +177,40 @@ export class ImapClient {
         const messages: IEmail[] = [];
         for await (const msg of this.client!.fetch(
             [uid],
-            { uid: true, envelope: true, flags: true, internalDate: true, source: true },
-            { uid: true }
+            {
+                uid: true,
+                envelope: true,
+                flags: true,
+                internalDate: true,
+                source: true,
+            },
+            { uid: true },
         )) {
-            const rawSource = msg.source || Buffer.from('');
+            const rawSource = msg.source || Buffer.from("");
             const parsed = await simpleParser(rawSource);
             messages.push({
                 id: String(msg.uid),
-                subject: parsed.subject || '(无主题)',
+                subject: parsed.subject || "(无主题)",
                 from: parsed.from
                     ? {
-                        name: parsed.from.text || parsed.from.value?.[0]?.address || '',
-                        address: parsed.from.value?.[0]?.address || '',
-                    }
+                          name:
+                              parsed.from.text ||
+                              parsed.from.value?.[0]?.address ||
+                              "",
+                          address: parsed.from.value?.[0]?.address || "",
+                      }
                     : undefined,
                 receivedAt: toShanghaiISO(
                     parsed.date instanceof Date
                         ? parsed.date.toISOString()
-                        : (msg.internalDate instanceof Date
-                            ? msg.internalDate.toISOString()
-                            : new Date().toISOString())
+                        : msg.internalDate instanceof Date
+                          ? msg.internalDate.toISOString()
+                          : new Date().toISOString(),
                 ),
-                isRead: msg.flags ? (msg.flags.has('\\Seen') || msg.flags.has('Seen')) : false,
-                body: this.cleanHtmlContent(parsed.text || parsed.html || ''),
+                isRead: msg.flags
+                    ? msg.flags.has("\\Seen") || msg.flags.has("Seen")
+                    : false,
+                body: this.cleanHtmlContent(parsed.text || parsed.html || ""),
                 hasAttachments: (parsed.attachments?.length || 0) > 0,
             });
         }
@@ -177,10 +224,15 @@ export class ImapClient {
         try {
             await this.ensureConnected();
 
-            const lock = await this.client!.getMailboxLock('INBOX');
+            const lock = await this.client!.getMailboxLock("INBOX");
             try {
                 const mailbox = this.client!.mailbox;
-                const totalCount = (mailbox && typeof mailbox === 'object' && 'exists' in mailbox) ? mailbox.exists : 0;
+                const totalCount =
+                    mailbox &&
+                    typeof mailbox === "object" &&
+                    "exists" in mailbox
+                        ? mailbox.exists
+                        : 0;
                 logger.info(`IMAP 邮箱 INBOX 消息总数: ${totalCount}`);
 
                 if (totalCount === 0) {
@@ -200,25 +252,32 @@ export class ImapClient {
                     hasAttachments: boolean;
                 }[] = [];
 
-                for await (const msg of this.client!.fetch(
-                    range,
-                    { uid: true, envelope: true, flags: true, internalDate: true }
-                )) {
+                for await (const msg of this.client!.fetch(range, {
+                    uid: true,
+                    envelope: true,
+                    flags: true,
+                    internalDate: true,
+                })) {
                     messages.push({
                         uid: msg.uid,
-                        subject: msg.envelope?.subject || '(无主题)',
+                        subject: msg.envelope?.subject || "(无主题)",
                         from: msg.envelope?.from?.[0]
                             ? {
-                                name: msg.envelope.from[0].name || msg.envelope.from[0].address || '',
-                                address: msg.envelope.from[0].address || '',
-                            }
+                                  name:
+                                      msg.envelope.from[0].name ||
+                                      msg.envelope.from[0].address ||
+                                      "",
+                                  address: msg.envelope.from[0].address || "",
+                              }
                             : undefined,
                         receivedAt: toShanghaiISO(
                             msg.internalDate instanceof Date
                                 ? msg.internalDate.toISOString()
-                                : new Date().toISOString()
+                                : new Date().toISOString(),
                         ),
-                        isRead: msg.flags ? (msg.flags.has('\\Seen') || msg.flags.has('Seen')) : false,
+                        isRead: msg.flags
+                            ? msg.flags.has("\\Seen") || msg.flags.has("Seen")
+                            : false,
                         hasAttachments: false,
                     });
                 }
@@ -236,8 +295,15 @@ export class ImapClient {
                 lock.release();
             }
         } catch (error: any) {
-            const detail = error.response || error.serverResponseCode || error.rspCode || '';
-            logger.error(`获取 IMAP 邮件失败: ${error.message || '未知错误'} ${detail ? `| 服务器响应: ${detail}` : ''}`, error.stack || '');
+            const detail =
+                error.response ||
+                error.serverResponseCode ||
+                error.rspCode ||
+                "";
+            logger.error(
+                `获取 IMAP 邮件失败: ${error.message || "未知错误"} ${detail ? `| 服务器响应: ${detail}` : ""}`,
+                error.stack || "",
+            );
             return [];
         }
     }
@@ -246,7 +312,7 @@ export class ImapClient {
         try {
             await this.ensureConnected();
 
-            const lock = await this.client!.getMailboxLock('INBOX');
+            const lock = await this.client!.getMailboxLock("INBOX");
             try {
                 const uid = parseInt(itemId, 10);
                 if (isNaN(uid)) {
@@ -265,29 +331,43 @@ export class ImapClient {
 
                 for await (const msg of this.client!.fetch(
                     [uid],
-                    { uid: true, envelope: true, flags: true, internalDate: true, source: true },
-                    { uid: true }
+                    {
+                        uid: true,
+                        envelope: true,
+                        flags: true,
+                        internalDate: true,
+                        source: true,
+                    },
+                    { uid: true },
                 )) {
-                    const rawSource = msg.source || Buffer.from('');
+                    const rawSource = msg.source || Buffer.from("");
                     const parsed = await simpleParser(rawSource);
                     messages.push({
                         uid: msg.uid,
-                        subject: parsed.subject || '(无主题)',
+                        subject: parsed.subject || "(无主题)",
                         from: parsed.from
                             ? {
-                                name: parsed.from.text || parsed.from.value?.[0]?.address || '',
-                                address: parsed.from.value?.[0]?.address || '',
-                            }
+                                  name:
+                                      parsed.from.text ||
+                                      parsed.from.value?.[0]?.address ||
+                                      "",
+                                  address:
+                                      parsed.from.value?.[0]?.address || "",
+                              }
                             : undefined,
                         receivedAt: toShanghaiISO(
                             parsed.date instanceof Date
                                 ? parsed.date.toISOString()
-                                : (msg.internalDate instanceof Date
-                                    ? msg.internalDate.toISOString()
-                                    : new Date().toISOString())
+                                : msg.internalDate instanceof Date
+                                  ? msg.internalDate.toISOString()
+                                  : new Date().toISOString(),
                         ),
-                        isRead: msg.flags ? (msg.flags.has('\\Seen') || msg.flags.has('Seen')) : false,
-                        body: this.cleanHtmlContent(parsed.text || parsed.html || ''),
+                        isRead: msg.flags
+                            ? msg.flags.has("\\Seen") || msg.flags.has("Seen")
+                            : false,
+                        body: this.cleanHtmlContent(
+                            parsed.text || parsed.html || "",
+                        ),
                         hasAttachments: (parsed.attachments?.length || 0) > 0,
                     });
                 }
@@ -310,23 +390,30 @@ export class ImapClient {
                 lock.release();
             }
         } catch (error: any) {
-            const detail = error.response || error.serverResponseCode || error.rspCode || '';
-            logger.error(`获取IMAP邮件详情失败: ${error.message || '未知错误'} ${detail ? `| 服务器响应: ${detail}` : ''}`, error.stack || '');
+            const detail =
+                error.response ||
+                error.serverResponseCode ||
+                error.rspCode ||
+                "";
+            logger.error(
+                `获取IMAP邮件详情失败: ${error.message || "未知错误"} ${detail ? `| 服务器响应: ${detail}` : ""}`,
+                error.stack || "",
+            );
             throw error;
         }
     }
 
     private cleanHtmlContent(html: string): string {
-        if (!html) return '';
+        if (!html) return "";
         return html
-            .replace(/<(script|style|head)\b[\s\S]*?<\/\1>/gi, '')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/&nbsp;/g, ' ')
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
+            .replace(/<(script|style|head)\b[\s\S]*?<\/\1>/gi, "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/&nbsp;/g, " ")
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
             .replace(/&quot;/g, '"')
-            .replace(/\s+/g, ' ')
+            .replace(/\s+/g, " ")
             .trim();
     }
 

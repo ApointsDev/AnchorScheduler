@@ -36,6 +36,8 @@ export interface AddScheduleArgs {
     scheduleType?: ScheduleType;
     // internal flag used by server to bypass enqueue/approval
     _internal_approve?: boolean;
+    // internal flag used by server to force allow conflicts
+    _internal_allow_conflict?: boolean;
 }
 
 export interface AddScheduleSuccessResult extends ToolResult {

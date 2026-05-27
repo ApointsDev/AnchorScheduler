@@ -1,34 +1,47 @@
-import sqlite3 from 'sqlite3';
-import { open, Database } from 'sqlite';
-import { User, Task } from '../index';
-import { v4 as uuidv4 } from 'uuid';
-import { logger } from '../Utils/logger.js';
-import { toShanghaiISO } from '../Utils/time.js';
-import { assertNoConflict } from './scheduleConflict';
+import sqlite3 from "sqlite3";
+import { open, Database } from "sqlite";
+import { User, Task } from "../index";
+import { v4 as uuidv4 } from "uuid";
+import { logger } from "../Utils/logger.js";
+import { toShanghaiISO } from "../Utils/time.js";
+import { assertNoConflict } from "./scheduleConflict";
 
 class DatabaseService {
-
     private db: Database | null = null;
     private onLogAdded: ((userId: string, log: any) => void) | null = null;
 
     public setLogListener(listener: (userId: string, log: any) => void) {
         this.onLogAdded = listener;
     }
-    
+
+    private normalizeImportance(value?: string): "high" | "normal" | "low" {
+        const normalized = typeof value === "string" ? value.toLowerCase() : "";
+        if (
+            normalized === "high" ||
+            normalized === "low" ||
+            normalized === "normal"
+        ) {
+            return normalized as "high" | "normal" | "low";
+        }
+        if (normalized === "medium") return "normal";
+        return "normal";
+    }
+
     async initialize() {
         try {
             // 使用 Azure 的临时存储路径或当前目录
-            const dbPath = process.env.WEBSITE_INSTANCE_ID ? 
-                '/home/data/users.db' : './users.db';
-            
+            const dbPath = process.env.WEBSITE_INSTANCE_ID
+                ? "/home/data/users.db"
+                : "./users.db";
+
             logger.info(`Initializing database at path: ${dbPath}`);
-            
+
             // 打开或创建数据库
             this.db = await open({
                 filename: dbPath,
-                driver: sqlite3.Database
+                driver: sqlite3.Database,
             });
-            
+
             // 创建用户表
             await this.db.exec(`
                 CREATE TABLE IF NOT EXISTS users (
@@ -47,6 +60,15 @@ class DatabaseService {
                     mailReadingSpan INTEGER DEFAULT 30,
                     conflictBoundaryInclusive BOOLEAN DEFAULT 0,
                     MSRefreshToken TEXT,
+                    CalDavBaseUrl TEXT,
+                    CalDavUsername TEXT,
+                    CalDavPassword TEXT,
+                    CalDavPrincipalUrl TEXT,
+                    CalDavCalendarHome TEXT,
+                    CalDavCalendarUrl TEXT,
+                    CalDavSyncToken TEXT,
+                    CalDavEnabled BOOLEAN DEFAULT 0,
+                    CalDavLastSyncAt DATETIME,
                     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
@@ -63,98 +85,483 @@ class DatabaseService {
                     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
             `);
-            
+
             // 如果表已存在但缺少ExchangeBinded字段，则添加该字段
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN ExchangeBinded BOOLEAN DEFAULT 0;`); } catch (e) { logger.info('ExchangeBinded column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN ExchangeAccessToken TEXT;`); } catch (e) { logger.info('ExchangeAccessToken column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN ExchangeRefreshToken TEXT;`); } catch (e) { logger.info('ExchangeRefreshToken column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN ExchangeTokenExpiresAt INTEGER;`); } catch (e) { logger.info('ExchangeTokenExpiresAt column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN CAFSub TEXT;`); } catch (e) { logger.info('CAFSub column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN CAFAccessToken TEXT;`); } catch (e) { logger.info('CAFAccessToken column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN CAFTokenExpiresAt INTEGER;`); } catch (e) { logger.info('CAFTokenExpiresAt column exists or error:', (e as Error).message); }
-            
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN ExchangeBinded BOOLEAN DEFAULT 0;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "ExchangeBinded column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN ExchangeAccessToken TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "ExchangeAccessToken column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN ExchangeRefreshToken TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "ExchangeRefreshToken column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN ExchangeTokenExpiresAt INTEGER;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "ExchangeTokenExpiresAt column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(`ALTER TABLE users ADD COLUMN CAFSub TEXT;`);
+            } catch (e) {
+                logger.info(
+                    "CAFSub column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CAFAccessToken TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CAFAccessToken column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CAFTokenExpiresAt INTEGER;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CAFTokenExpiresAt column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CAFRefreshToken TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CAFRefreshToken column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN ImapHost TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "ImapHost column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN ImapPort INTEGER;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "ImapPort column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN ImapBinded BOOLEAN DEFAULT 0;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "ImapBinded column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN ImapEmail TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "ImapEmail column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN ImapPassword TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "ImapPassword column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN ImapTls BOOLEAN DEFAULT 1;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "ImapTls column exists or error:",
+                    (e as Error).message,
+                );
+            }
+
             // 如果表已存在但缺少XJTLUaccount字段，则添加该字段
             try {
-                await this.db.exec(`ALTER TABLE users ADD COLUMN XJTLUaccount TEXT;`);
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN XJTLUaccount TEXT;`,
+                );
             } catch (e) {
                 // 如果字段已存在，忽略错误
-                logger.info('XJTLUaccount column already exists or error adding it:', (e as Error).message);
+                logger.info(
+                    "XJTLUaccount column already exists or error adding it:",
+                    (e as Error).message,
+                );
             }
-            
+
             // 如果表已存在但缺少timetableUrl字段，则添加该字段
             try {
-                await this.db.exec(`ALTER TABLE users ADD COLUMN timetableUrl TEXT DEFAULT '';`);
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN timetableUrl TEXT DEFAULT '';`,
+                );
             } catch (e) {
                 // 如果字段已存在，忽略错误
-                logger.info('timetableUrl column already exists or error adding it:', (e as Error).message);
+                logger.info(
+                    "timetableUrl column already exists or error adding it:",
+                    (e as Error).message,
+                );
             }
-            
+
             // 如果表已存在但缺少timetableFetchLevel字段，则添加该字段
             try {
-                await this.db.exec(`ALTER TABLE users ADD COLUMN timetableFetchLevel INTEGER DEFAULT 0;`);
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN timetableFetchLevel INTEGER DEFAULT 0;`,
+                );
             } catch (e) {
                 // 如果字段已存在，忽略错误
-                logger.info('timetableFetchLevel column already exists or error adding it:', (e as Error).message);
+                logger.info(
+                    "timetableFetchLevel column already exists or error adding it:",
+                    (e as Error).message,
+                );
             }
-            
+
             // 如果表已存在但缺少mailReadingSpan字段，则添加该字段
             try {
-                await this.db.exec(`ALTER TABLE users ADD COLUMN mailReadingSpan INTEGER DEFAULT 30;`);
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN mailReadingSpan INTEGER DEFAULT 30;`,
+                );
             } catch (e) {
                 // 如果字段已存在，忽略错误
-                logger.info('mailReadingSpan column already exists or error adding it:', (e as Error).message);
+                logger.info(
+                    "mailReadingSpan column already exists or error adding it:",
+                    (e as Error).message,
+                );
             }
 
             // 如果缺少 conflictBoundaryInclusive 字段则添加
             try {
-                await this.db.exec(`ALTER TABLE users ADD COLUMN conflictBoundaryInclusive BOOLEAN DEFAULT 0;`);
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN conflictBoundaryInclusive BOOLEAN DEFAULT 0;`,
+                );
             } catch (e) {
-                logger.info('conflictBoundaryInclusive column already exists or error adding it:', (e as Error).message);
+                logger.info(
+                    "conflictBoundaryInclusive column already exists or error adding it:",
+                    (e as Error).message,
+                );
             }
 
             // 如果表已存在但缺少 highEnergyPeriods 字段，则添加该字段
             try {
-                await this.db.exec(`ALTER TABLE users ADD COLUMN highEnergyPeriods TEXT DEFAULT '[]';`);
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN highEnergyPeriods TEXT DEFAULT '[]';`,
+                );
             } catch (e) {
-                logger.info('highEnergyPeriods column already exists or error adding it:', (e as Error).message);
+                logger.info(
+                    "highEnergyPeriods column already exists or error adding it:",
+                    (e as Error).message,
+                );
             }
 
             // 如果缺少 weekOffset 字段则添加（用户可配置的周数偏移量）
             try {
-                await this.db.exec(`ALTER TABLE users ADD COLUMN weekOffset INTEGER DEFAULT 0;`);
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN weekOffset INTEGER DEFAULT 0;`,
+                );
             } catch (e) {
-                logger.info('weekOffset column already exists or error adding it:', (e as Error).message);
+                logger.info(
+                    "weekOffset column already exists or error adding it:",
+                    (e as Error).message,
+                );
             }
 
             // 添加 MSRefreshToken 字段
             try {
-                await this.db.exec(`ALTER TABLE users ADD COLUMN MSRefreshToken TEXT;`);
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN MSRefreshToken TEXT;`,
+                );
             } catch (e) {
-                logger.info('MSRefreshToken column already exists or error adding it:', (e as Error).message);
+                logger.info(
+                    "MSRefreshToken column already exists or error adding it:",
+                    (e as Error).message,
+                );
             }
 
+            // CalDAV 字段 (migration)
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavBaseUrl TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavBaseUrl column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavUsername TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavUsername column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavPassword TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavPassword column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavPrincipalUrl TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavPrincipalUrl column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavCalendarHome TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavCalendarHome column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavCalendarUrl TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavCalendarUrl column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavSyncToken TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavSyncToken column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavEnabled BOOLEAN DEFAULT 0;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavEnabled column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavLastSyncAt DATETIME;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavLastSyncAt column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavServerEnabled BOOLEAN DEFAULT 0;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavServerEnabled column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN CalDavClientProfile TEXT DEFAULT 'auto';`,
+                );
+            } catch (e) {
+                logger.info(
+                    "CalDavClientProfile column exists or error:",
+                    (e as Error).message,
+                );
+            }
+
+            // 如果表已存在但缺少XJTLUaccount字段，则添加该字段
             // Smtp 绑定字段 (migration)
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpBinded BOOLEAN DEFAULT 0;`); } catch (e) { logger.info('SmtpBinded column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpEmail TEXT;`); } catch (e) { logger.info('SmtpEmail column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpPassword TEXT;`); } catch (e) { logger.info('SmtpPassword column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpHost TEXT;`); } catch (e) { logger.info('SmtpHost column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpPort INTEGER;`); } catch (e) { logger.info('SmtpPort column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE users ADD COLUMN SmtpTls BOOLEAN DEFAULT 1;`); } catch (e) { logger.info('SmtpTls column exists or error:', (e as Error).message); }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN SmtpBinded BOOLEAN DEFAULT 0;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "SmtpBinded column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN SmtpEmail TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "SmtpEmail column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN SmtpPassword TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "SmtpPassword column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN SmtpHost TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "SmtpHost column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN SmtpPort INTEGER;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "SmtpPort column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE users ADD COLUMN SmtpTls BOOLEAN DEFAULT 1;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "SmtpTls column exists or error:",
+                    (e as Error).message,
+                );
+            }
 
             // tasks 表新增列（迁移场景）
-            try { await this.db.exec(`ALTER TABLE tasks ADD COLUMN recurrenceRule TEXT;`); } catch (e) { logger.info('recurrenceRule column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE tasks ADD COLUMN parentTaskId TEXT;`); } catch (e) { logger.info('parentTaskId column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE tasks ADD COLUMN importance TEXT DEFAULT 'normal';`); } catch (e) { logger.info('importance column exists or error:', (e as Error).message); }
-            try { await this.db.exec(`ALTER TABLE tasks ADD COLUMN scheduleType TEXT DEFAULT 'single';`); } catch (e) { logger.info('scheduleType column exists or error:', (e as Error).message); }
             try {
-                await this.db.run(`UPDATE tasks SET scheduleType = 'recurring_daily' WHERE recurrenceRule LIKE '%"freq":"daily"%' AND (scheduleType IS NULL OR scheduleType = '' OR scheduleType = 'single')`);
-                await this.db.run(`UPDATE tasks SET scheduleType = 'recurring_weekly' WHERE recurrenceRule LIKE '%"freq":"weekly"%' AND (scheduleType IS NULL OR scheduleType = '' OR scheduleType = 'single')`);
-                await this.db.run(`UPDATE tasks SET scheduleType = 'recurring_weekly_by_week_number' WHERE recurrenceRule LIKE '%"freq":"weeklyByWeekNumber"%' AND (scheduleType IS NULL OR scheduleType = '' OR scheduleType = 'single')`);
-                await this.db.run(`UPDATE tasks SET scheduleType = 'recurring_daily_on_days' WHERE recurrenceRule LIKE '%"freq":"dailyOnDays"%' AND (scheduleType IS NULL OR scheduleType = '' OR scheduleType = 'single')`);
+                await this.db.exec(
+                    `ALTER TABLE tasks ADD COLUMN recurrenceRule TEXT;`,
+                );
             } catch (e) {
-                logger.info('scheduleType backfill skipped or failed:', (e as Error).message);
+                logger.info(
+                    "recurrenceRule column exists or error:",
+                    (e as Error).message,
+                );
             }
-            
+            try {
+                await this.db.exec(
+                    `ALTER TABLE tasks ADD COLUMN parentTaskId TEXT;`,
+                );
+            } catch (e) {
+                logger.info(
+                    "parentTaskId column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE tasks ADD COLUMN importance TEXT DEFAULT 'normal';`,
+                );
+            } catch (e) {
+                logger.info(
+                    "importance column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.exec(
+                    `ALTER TABLE tasks ADD COLUMN scheduleType TEXT DEFAULT 'single';`,
+                );
+            } catch (e) {
+                logger.info(
+                    "scheduleType column exists or error:",
+                    (e as Error).message,
+                );
+            }
+            try {
+                await this.db.run(
+                    `UPDATE tasks SET scheduleType = 'recurring_daily' WHERE recurrenceRule LIKE '%"freq":"daily"%' AND (scheduleType IS NULL OR scheduleType = '' OR scheduleType = 'single')`,
+                );
+                await this.db.run(
+                    `UPDATE tasks SET scheduleType = 'recurring_weekly' WHERE recurrenceRule LIKE '%"freq":"weekly"%' AND (scheduleType IS NULL OR scheduleType = '' OR scheduleType = 'single')`,
+                );
+                await this.db.run(
+                    `UPDATE tasks SET scheduleType = 'recurring_weekly_by_week_number' WHERE recurrenceRule LIKE '%"freq":"weeklyByWeekNumber"%' AND (scheduleType IS NULL OR scheduleType = '' OR scheduleType = 'single')`,
+                );
+                await this.db.run(
+                    `UPDATE tasks SET scheduleType = 'recurring_daily_on_days' WHERE recurrenceRule LIKE '%"freq":"dailyOnDays"%' AND (scheduleType IS NULL OR scheduleType = '' OR scheduleType = 'single')`,
+                );
+            } catch (e) {
+                logger.info(
+                    "scheduleType backfill skipped or failed:",
+                    (e as Error).message,
+                );
+            }
+
             // 创建任务表
             await this.db.exec(`
                 CREATE TABLE IF NOT EXISTS tasks (
@@ -192,99 +599,260 @@ class DatabaseService {
                     FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
                 );
             `);
-            
-            logger.success('Database initialized successfully');
+
+            await this.db.exec(`
+                CREATE TABLE IF NOT EXISTS calendar_event_map (
+                    id TEXT PRIMARY KEY,
+                    userId TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    localTaskId TEXT NOT NULL,
+                    remoteUid TEXT,
+                    remoteHref TEXT,
+                    remoteEtag TEXT,
+                    calendarUrl TEXT,
+                    rawData TEXT,
+                    lastSyncAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+                );
+            `);
+            await this.db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_calendar_event_map_user ON calendar_event_map(userId);`,
+            );
+            await this.db.exec(
+                `CREATE UNIQUE INDEX IF NOT EXISTS idx_calendar_event_map_provider_remote ON calendar_event_map(provider, remoteUid, userId);`,
+            );
+            await this.db.exec(
+                `CREATE UNIQUE INDEX IF NOT EXISTS idx_calendar_event_map_provider_local ON calendar_event_map(provider, localTaskId);`,
+            );
+
+            logger.success("Database initialized successfully");
         } catch (error) {
-            logger.error('Failed to initialize database:', error);
+            logger.error("Failed to initialize database:", error);
             throw error;
         }
     }
 
-    async addUserLog(userId: string, type: string, message: string, payload?: any): Promise<{ id: string; time: string; type: string; message: string; payload?: any }> {
-        if (!this.db) throw new Error('Database not initialized');
+    async addUserLog(
+        userId: string,
+        type: string,
+        message: string,
+        payload?: any,
+    ): Promise<{
+        id: string;
+        time: string;
+        type: string;
+        message: string;
+        payload?: any;
+    }> {
+        if (!this.db) throw new Error("Database not initialized");
         const id = uuidv4();
-        const payloadStr = payload !== undefined ? JSON.stringify(payload) : null;
+        const payloadStr =
+            payload !== undefined ? JSON.stringify(payload) : null;
         await this.db.run(
             `INSERT INTO user_logs (id, userId, type, message, payload) VALUES (?, ?, ?, ?, ?)`,
-            [id, userId, type, message, payloadStr]
+            [id, userId, type, message, payloadStr],
         );
-        const row: any = await this.db.get(`SELECT * FROM user_logs WHERE id = ?`, [id]);
-        const logEntry = { id: row.id, time: row.time, type: row.type, message: row.message, payload: row.payload ? JSON.parse(row.payload) : undefined };
-        
+        const row: any = await this.db.get(
+            `SELECT * FROM user_logs WHERE id = ?`,
+            [id],
+        );
+        const logEntry = {
+            id: row.id,
+            time: toShanghaiISO(row.time),
+            type: row.type,
+            message: row.message,
+            payload: row.payload ? JSON.parse(row.payload) : undefined,
+        };
+
         // Notify listener
         if (this.onLogAdded) {
             this.onLogAdded(userId, logEntry);
         }
-        
+
         return logEntry;
     }
 
-    async getUserLogsPage(userId: string, opts?: { limit?: number; offset?: number; since?: string; until?: string; type?: string }): Promise<{ logs: Array<{ id: string; time: string; type: string; message: string; payload?: any }>; total: number }> {
-        if (!this.db) throw new Error('Database not initialized');
-        const where: string[] = ['userId = ?'];
+    async getUserLogsPage(
+        userId: string,
+        opts?: {
+            limit?: number;
+            offset?: number;
+            since?: string;
+            until?: string;
+            type?: string;
+        },
+    ): Promise<{
+        logs: Array<{
+            id: string;
+            time: string;
+            type: string;
+            message: string;
+            payload?: any;
+        }>;
+        total: number;
+    }> {
+        if (!this.db) throw new Error("Database not initialized");
+        const where: string[] = ["userId = ?"];
         const params: any[] = [userId];
-        if (opts?.since) { where.push('time >= ?'); params.push(opts.since); }
-        if (opts?.until) { where.push('time <= ?'); params.push(opts.until); }
-        if (opts?.type) { where.push('type = ?'); params.push(opts.type); }
-        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        if (opts?.since) {
+            where.push("time >= ?");
+            params.push(opts.since);
+        }
+        if (opts?.until) {
+            where.push("time <= ?");
+            params.push(opts.until);
+        }
+        if (opts?.type) {
+            where.push("type = ?");
+            params.push(opts.type);
+        }
+        const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
         const limit = Math.max(1, Math.min(500, opts?.limit || 50));
         const offset = Math.max(0, opts?.offset || 0);
-        const countRow: any = await this.db.get(`SELECT COUNT(*) as cnt FROM user_logs ${whereSql}`, params);
-        const total = countRow ? (countRow.cnt || 0) : 0;
-        const rows = await this.db.all(`SELECT * FROM user_logs ${whereSql} ORDER BY time DESC LIMIT ? OFFSET ?`, params.concat([limit, offset]));
-        const logs = rows.map((r: any) => ({ id: r.id, time: r.time, type: r.type, message: r.message, payload: r.payload ? JSON.parse(r.payload) : undefined }));
+        const countRow: any = await this.db.get(
+            `SELECT COUNT(*) as cnt FROM user_logs ${whereSql}`,
+            params,
+        );
+        const total = countRow ? countRow.cnt || 0 : 0;
+        const rows = await this.db.all(
+            `SELECT * FROM user_logs ${whereSql} ORDER BY time DESC LIMIT ? OFFSET ?`,
+            params.concat([limit, offset]),
+        );
+        const logs = rows.map((r: any) => ({
+            id: r.id,
+            time: toShanghaiISO(r.time),
+            type: r.type,
+            message: r.message,
+            payload: r.payload ? JSON.parse(r.payload) : undefined,
+        }));
         return { logs, total };
     }
-    
+
     async addUser(user: User): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
-        
-          await this.db.run(
-          `INSERT INTO users 
-           (id, email, name, XJTLUaccount, XJTLUPassword, passwordHash, JWTtoken, MStoken, MSRefreshToken, MSbinded, ExchangeAccessToken, ExchangeRefreshToken, ExchangeTokenExpiresAt, ExchangeBinded, SmtpBinded, SmtpEmail, SmtpPassword, SmtpHost, SmtpPort, SmtpTls, CAFSub, CAFAccessToken, CAFTokenExpiresAt, ebridgeBinded, timetableUrl, timetableFetchLevel, mailReadingSpan, conflictBoundaryInclusive, weekOffset) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [user.id, user.email, user.name, user.XJTLUaccount, user.XJTLUPassword, user.passwordHash, 
-           user.JWTtoken, user.MStoken, user.MSRefreshToken, user.MSbinded ? 1 : 0, 
-           user.ExchangeAccessToken, user.ExchangeRefreshToken, user.ExchangeTokenExpiresAt, user.ExchangeBinded ? 1 : 0,
-           user.SmtpBinded ? 1 : 0, user.SmtpEmail, user.SmtpPassword, user.SmtpHost, user.SmtpPort, user.SmtpTls ? 1 : 0,
-           user.CAFSub, user.CAFAccessToken, user.CAFTokenExpiresAt,
-           user.ebridgeBinded ? 1 : 0, user.timetableUrl, user.timetableFetchLevel || 0, user.mailReadingSpan ?? 30, user.conflictBoundaryInclusive ? 1 : 0, user.weekOffset || 0]
-       );
-        
+        if (!this.db) throw new Error("Database not initialized");
+
+        await this.db.run(
+            `INSERT INTO users
+           (id, email, name, XJTLUaccount, XJTLUPassword, passwordHash, JWTtoken, MStoken, MSRefreshToken, MSbinded,
+            CalDavBaseUrl, CalDavUsername, CalDavPassword, CalDavPrincipalUrl, CalDavCalendarHome, CalDavCalendarUrl, CalDavSyncToken, CalDavEnabled, CalDavLastSyncAt,
+            ExchangeAccessToken, ExchangeRefreshToken, ExchangeTokenExpiresAt, ExchangeBinded,
+            ImapBinded, ImapEmail, ImapPassword, ImapHost, ImapPort, ImapTls, CAFSub, CAFAccessToken, CAFRefreshToken, CAFTokenExpiresAt, ebridgeBinded, timetableUrl, timetableFetchLevel, mailReadingSpan, conflictBoundaryInclusive, weekOffset)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                user.id,
+                user.email,
+                user.name,
+                user.XJTLUaccount,
+                user.XJTLUPassword,
+                user.passwordHash,
+                user.JWTtoken,
+                user.MStoken,
+                user.MSRefreshToken,
+                user.MSbinded ? 1 : 0,
+                user.CalDavBaseUrl,
+                user.CalDavUsername,
+                user.CalDavPassword,
+                user.CalDavPrincipalUrl,
+                user.CalDavCalendarHome,
+                user.CalDavCalendarUrl,
+                user.CalDavSyncToken,
+                user.CalDavEnabled ? 1 : 0,
+                user.CalDavLastSyncAt,
+                user.ExchangeAccessToken,
+                user.ExchangeRefreshToken,
+                user.ExchangeTokenExpiresAt,
+                user.ExchangeBinded ? 1 : 0,
+                user.ImapBinded ? 1 : 0,
+                user.ImapEmail,
+                user.ImapPassword,
+                user.ImapHost,
+                user.ImapPort,
+                user.ImapTls ? 1 : 0,
+                user.CAFSub,
+                user.CAFAccessToken,
+                user.CAFRefreshToken,
+                user.CAFTokenExpiresAt,
+                user.ebridgeBinded ? 1 : 0,
+                user.timetableUrl,
+                user.timetableFetchLevel || 0,
+                user.mailReadingSpan ?? 30,
+                user.conflictBoundaryInclusive ? 1 : 0,
+                user.weekOffset || 0,
+            ],
+        );
+
         // 保存用户的任务
         for (const task of user.tasks || []) {
             await this.addTask(user.id, task);
         }
     }
-    
+
     async updateUser(user: User): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
-        
+        if (!this.db) throw new Error("Database not initialized");
+
         await this.db.run(
-            `UPDATE users 
-             SET email = ?, name = ?, XJTLUaccount = ?, XJTLUPassword = ?, passwordHash = ?, 
-                 JWTtoken = ?, MStoken = ?, MSRefreshToken = ?, MSbinded = ?, 
+            `UPDATE users
+             SET email = ?, name = ?, XJTLUaccount = ?, XJTLUPassword = ?, passwordHash = ?,
+                 JWTtoken = ?, MStoken = ?, MSRefreshToken = ?, MSbinded = ?,
                  ExchangeAccessToken = ?, ExchangeRefreshToken = ?, ExchangeTokenExpiresAt = ?, ExchangeBinded = ?,
-                 SmtpBinded = ?, SmtpEmail = ?, SmtpPassword = ?, SmtpHost = ?, SmtpPort = ?, SmtpTls = ?,
-                 CAFSub = ?, CAFAccessToken = ?, CAFTokenExpiresAt = ?,
+                 ImapBinded = ?, ImapEmail = ?, ImapPassword = ?, ImapHost = ?, ImapPort = ?, ImapTls = ?,
+                 CAFSub = ?, CAFAccessToken = ?, CAFRefreshToken = ?, CAFTokenExpiresAt = ?,
+                 CalDavBaseUrl = ?, CalDavUsername = ?, CalDavPassword = ?, CalDavPrincipalUrl = ?,
+                 CalDavCalendarHome = ?, CalDavCalendarUrl = ?, CalDavSyncToken = ?, CalDavEnabled = ?, CalDavServerEnabled = ?, CalDavLastSyncAt = ?,
                  ebridgeBinded = ?, timetableUrl = ?, timetableFetchLevel = ?, mailReadingSpan = ?, conflictBoundaryInclusive = ?, weekOffset = ?, updatedAt = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [user.email, user.name, user.XJTLUaccount, user.XJTLUPassword, user.passwordHash, 
-             user.JWTtoken, user.MStoken, user.MSRefreshToken, user.MSbinded ? 1 : 0, 
-             user.ExchangeAccessToken, user.ExchangeRefreshToken, user.ExchangeTokenExpiresAt, user.ExchangeBinded ? 1 : 0,
-             user.SmtpBinded ? 1 : 0, user.SmtpEmail, user.SmtpPassword, user.SmtpHost, user.SmtpPort, user.SmtpTls ? 1 : 0,
-             user.CAFSub, user.CAFAccessToken, user.CAFTokenExpiresAt,
-             user.ebridgeBinded ? 1 : 0, user.timetableUrl, user.timetableFetchLevel || 0, user.mailReadingSpan ?? 30, user.conflictBoundaryInclusive ? 1 : 0, user.weekOffset || 0, user.id]
+            [
+                user.email,
+                user.name,
+                user.XJTLUaccount,
+                user.XJTLUPassword,
+                user.passwordHash,
+                user.JWTtoken,
+                user.MStoken,
+                user.MSRefreshToken,
+                user.MSbinded ? 1 : 0,
+                user.ExchangeAccessToken,
+                user.ExchangeRefreshToken,
+                user.ExchangeTokenExpiresAt,
+                user.ExchangeBinded ? 1 : 0,
+                user.ImapBinded ? 1 : 0,
+                user.ImapEmail,
+                user.ImapPassword,
+                user.ImapHost,
+                user.ImapPort,
+                user.ImapTls ? 1 : 0,
+                user.CAFSub,
+                user.CAFAccessToken,
+                user.CAFRefreshToken,
+                user.CAFTokenExpiresAt,
+                user.CalDavBaseUrl,
+                user.CalDavUsername,
+                user.CalDavPassword,
+                user.CalDavPrincipalUrl,
+                user.CalDavCalendarHome,
+                user.CalDavCalendarUrl,
+                user.CalDavSyncToken,
+                user.CalDavEnabled ? 1 : 0,
+                user.CalDavServerEnabled ? 1 : 0,
+                user.CalDavLastSyncAt,
+                user.ebridgeBinded ? 1 : 0,
+                user.timetableUrl,
+                user.timetableFetchLevel || 0,
+                user.mailReadingSpan ?? 30,
+                user.conflictBoundaryInclusive ? 1 : 0,
+                user.weekOffset || 0,
+                user.id,
+            ],
         );
     }
-    
+
     async getUserById(id: string): Promise<User | null> {
-        if (!this.db) throw new Error('Database not initialized');
-        
-        const row: any = await this.db.get(
-            'SELECT * FROM users WHERE id = ?',
-            [id]
-        );
+        if (!this.db) throw new Error("Database not initialized");
+
+        const row: any = await this.db.get("SELECT * FROM users WHERE id = ?", [
+            id,
+        ]);
 
         if (!row) return null;
 
@@ -293,44 +861,64 @@ class DatabaseService {
 
         return this.mapRowToUser(row, tasks);
     }
-    
+
     async getUserByEmail(email: string): Promise<User | null> {
-        if (!this.db) throw new Error('Database not initialized');
-        
+        if (!this.db) throw new Error("Database not initialized");
+
         const row: any = await this.db.get(
-            'SELECT * FROM users WHERE email = ?',
-            [email]
+            "SELECT * FROM users WHERE email = ?",
+            [email],
         );
 
         if (!row) return null;
 
-        // 获取用户的任务
         const tasks = await this.getTasksByUserId(row.id);
-
         return this.mapRowToUser(row, tasks);
     }
-    
+
+    async getUserByCafSub(cafSub: string): Promise<User | null> {
+        if (!this.db) throw new Error("Database not initialized");
+
+        const row: any = await this.db.get(
+            "SELECT * FROM users WHERE CAFSub = ?",
+            [cafSub],
+        );
+
+        if (!row) return null;
+
+        const tasks = await this.getTasksByUserId(row.id);
+        return this.mapRowToUser(row, tasks);
+    }
+
     async getAllUsers(): Promise<User[]> {
-        if (!this.db) throw new Error('Database not initialized');
-        
-        const rows: any[] = await this.db.all('SELECT * FROM users');
+        if (!this.db) throw new Error("Database not initialized");
+
+        const rows: any[] = await this.db.all("SELECT * FROM users");
         const users: User[] = [];
-        
+
         for (const row of rows) {
             const tasks = await this.getTasksByUserId(row.id);
             users.push(this.mapRowToUser(row, tasks));
         }
-        
+
         return users;
     }
-    
-    async addTask(userId: string, task: Task, boundaryConflict?: boolean, allowConflict: boolean = true): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
+
+    async addTask(
+        userId: string,
+        task: Task,
+        boundaryConflict?: boolean,
+        allowConflict: boolean = true,
+    ): Promise<void> {
+        if (!this.db) throw new Error("Database not initialized");
         // 冲突检测：在写入前基于当前用户的任务进行时段冲突检查
         const existing = await this.getTasksByUserId(userId);
         if (!allowConflict) {
-            assertNoConflict(existing, task, { boundaryConflict: boundaryConflict ?? false });
+            assertNoConflict(existing, task, {
+                boundaryConflict: boundaryConflict ?? false,
+            });
         }
+        task.importance = this.normalizeImportance(task.importance);
         // 规范化时间字段为 UTC ISO 字符串，避免不同时区/格式导致的字符串比较错误
         try {
             if (task.startTime) task.startTime = toShanghaiISO(task.startTime);
@@ -343,102 +931,176 @@ class DatabaseService {
         } catch (e) {}
 
         await this.db.run(
-            `INSERT INTO tasks 
-             (id, userId, name, description, dueDate, startTime, endTime, 
-              location, completed, pushedToMSTodo, body, attendees, recurrenceRule, parentTaskId, importance, scheduleType) 
+            `INSERT INTO tasks
+             (id, userId, name, description, dueDate, startTime, endTime,
+              location, completed, pushedToMSTodo, body, attendees, recurrenceRule, parentTaskId, importance, scheduleType)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [task.id, userId, task.name, task.description, task.dueDate, 
-             task.startTime, task.endTime, task.location, task.completed ? 1 : 0, 
-             task.pushedToMSTodo ? 1 : 0, task.body, task.attendees ? JSON.stringify(task.attendees) : null, task.recurrenceRule || null, task.parentTaskId || null, task.importance || 'normal', task.scheduleType || 'single']
+            [
+                task.id,
+                userId,
+                task.name,
+                task.description,
+                task.dueDate,
+                task.startTime,
+                task.endTime,
+                task.location,
+                task.completed ? 1 : 0,
+                task.pushedToMSTodo ? 1 : 0,
+                task.body,
+                task.attendees ? JSON.stringify(task.attendees) : null,
+                task.recurrenceRule || null,
+                task.parentTaskId || null,
+                task.importance || "normal",
+                task.scheduleType || "single",
+            ],
         );
-        
-        await this.addUserLog(userId, 'task_created', `Created task ${task.name}`, { taskId: task.id, name: task.name });
+
+        await this.addUserLog(
+            userId,
+            "task_created",
+            `Created task ${task.name}`,
+            { taskId: task.id, name: task.name },
+        );
     }
-    
-    async updateTask(task: Task, boundaryConflict?: boolean, allowConflict: boolean = false): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
+
+    async updateTask(
+        task: Task,
+        boundaryConflict?: boolean,
+        allowConflict: boolean = false,
+    ): Promise<void> {
+        if (!this.db) throw new Error("Database not initialized");
         // 在更新任务前执行冲突检测：需要找出该任务所属用户的所有其他任务
-        const row = await this.db.get('SELECT userId FROM tasks WHERE id = ?', [task.id]);
+        const row = await this.db.get("SELECT userId FROM tasks WHERE id = ?", [
+            task.id,
+        ]);
         if (row && row.userId) {
             const existing = await this.getTasksByUserId(row.userId);
             // 排除自身后进行冲突检测
-            const others = existing.filter(t => t.id !== task.id);
+            const others = existing.filter((t) => t.id !== task.id);
             if (!allowConflict) {
-                assertNoConflict(others, task, { boundaryConflict: boundaryConflict ?? false });
+                assertNoConflict(others, task, {
+                    boundaryConflict: boundaryConflict ?? false,
+                });
             }
         }
+        task.importance = this.normalizeImportance(task.importance);
         // 规范化时间字段为 UTC ISO
-        try { if (task.startTime) task.startTime = toShanghaiISO(task.startTime); } catch (e) {}
-        try { if (task.endTime) task.endTime = toShanghaiISO(task.endTime); } catch (e) {}
-        try { if (task.dueDate) task.dueDate = toShanghaiISO(task.dueDate); } catch (e) {}
+        try {
+            if (task.startTime) task.startTime = toShanghaiISO(task.startTime);
+        } catch (e) {}
+        try {
+            if (task.endTime) task.endTime = toShanghaiISO(task.endTime);
+        } catch (e) {}
+        try {
+            if (task.dueDate) task.dueDate = toShanghaiISO(task.dueDate);
+        } catch (e) {}
 
         await this.db.run(
-            `UPDATE tasks 
-             SET name = ?, description = ?, dueDate = ?, startTime = ?, endTime = ?, 
+            `UPDATE tasks
+             SET name = ?, description = ?, dueDate = ?, startTime = ?, endTime = ?,
                  location = ?, completed = ?, pushedToMSTodo = ?, body = ?, attendees = ?, recurrenceRule = ?, parentTaskId = ?, importance = ?, scheduleType = ?,
                  updatedAt = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [task.name, task.description, task.dueDate, task.startTime, task.endTime, 
-             task.location, task.completed ? 1 : 0, task.pushedToMSTodo ? 1 : 0, 
-             task.body, task.attendees ? JSON.stringify(task.attendees) : null, task.recurrenceRule || null, task.parentTaskId || null, task.importance || 'normal', task.scheduleType || 'single', task.id]
+            [
+                task.name,
+                task.description,
+                task.dueDate,
+                task.startTime,
+                task.endTime,
+                task.location,
+                task.completed ? 1 : 0,
+                task.pushedToMSTodo ? 1 : 0,
+                task.body,
+                task.attendees ? JSON.stringify(task.attendees) : null,
+                task.recurrenceRule || null,
+                task.parentTaskId || null,
+                task.importance || "normal",
+                task.scheduleType || "single",
+                task.id,
+            ],
         );
     }
 
-    async patchTask(userId: string, taskId: string, updates: Partial<Task>, boundaryConflict?: boolean, allowConflict: boolean = false): Promise<Task> {
-        if (!this.db) throw new Error('Database not initialized');
+    async patchTask(
+        userId: string,
+        taskId: string,
+        updates: Partial<Task>,
+        boundaryConflict?: boolean,
+        allowConflict: boolean = false,
+    ): Promise<Task> {
+        if (!this.db) throw new Error("Database not initialized");
         const existingTask = await this.getTaskById(taskId);
-        if (!existingTask) throw new Error('Task not found');
+        if (!existingTask) throw new Error("Task not found");
+
+        if (updates.importance !== undefined) {
+            updates.importance = this.normalizeImportance(
+                updates.importance as string,
+            );
+        }
 
         const updatedTask = { ...existingTask, ...updates, id: taskId };
 
         // 如果时间变更，执行冲突检测
         if (updates.startTime || updates.endTime) {
             const allTasks = await this.getTasksByUserId(userId);
-            const otherTasks = allTasks.filter(t => t.id !== taskId);
+            const otherTasks = allTasks.filter((t) => t.id !== taskId);
             if (!allowConflict) {
-                assertNoConflict(otherTasks, updatedTask, { boundaryConflict: boundaryConflict ?? false });
+                assertNoConflict(otherTasks, updatedTask, {
+                    boundaryConflict: boundaryConflict ?? false,
+                });
             }
         }
 
-        const fields = Object.keys(updates).filter(k => k !== 'id');
+        const fields = Object.keys(updates).filter((k) => k !== "id");
         if (fields.length === 0) return existingTask;
 
         // 规范化时间字段（若在更新中出现）以 UTC ISO 格式写入
         if (updates.startTime) {
-            try { updates.startTime = toShanghaiISO(updates.startTime as string); } catch (e) {}
+            try {
+                updates.startTime = toShanghaiISO(updates.startTime as string);
+            } catch (e) {}
         }
         if (updates.endTime) {
-            try { updates.endTime = toShanghaiISO(updates.endTime as string); } catch (e) {}
+            try {
+                updates.endTime = toShanghaiISO(updates.endTime as string);
+            } catch (e) {}
         }
         if (updates.dueDate) {
-            try { updates.dueDate = toShanghaiISO(updates.dueDate as string); } catch (e) {}
+            try {
+                updates.dueDate = toShanghaiISO(updates.dueDate as string);
+            } catch (e) {}
         }
 
-        const setClauses = fields.map(f => `${f} = ?`).join(', ');
-        const values = fields.map(f => {
+        const setClauses = fields.map((f) => `${f} = ?`).join(", ");
+        const values = fields.map((f) => {
             const key = f as keyof typeof updates;
             let value = updates[key];
-            if (typeof value === 'boolean') return value ? 1 : 0;
-            if (typeof value === 'object' && value !== null) return JSON.stringify(value);
+            if (typeof value === "boolean") return value ? 1 : 0;
+            if (typeof value === "object" && value !== null)
+                return JSON.stringify(value);
             return value;
         });
 
         const sql = `UPDATE tasks SET ${setClauses}, updatedAt = CURRENT_TIMESTAMP WHERE id = ? AND userId = ?`;
         await this.db.run(sql, [...values, taskId, userId]);
 
-        await this.addUserLog(userId, 'task_updated', `Updated task ${taskId}`, { taskId, updates });
-
-        return await this.getTaskById(taskId) as Task;
-    }
-    
-    async getTasksByUserId(userId: string): Promise<Task[]> {
-        if (!this.db) throw new Error('Database not initialized');
-        
-        const rows = await this.db.all(
-            'SELECT * FROM tasks WHERE userId = ?',
-            [userId]
+        await this.addUserLog(
+            userId,
+            "task_updated",
+            `Updated task ${taskId}`,
+            { taskId, updates },
         );
-        
+
+        return (await this.getTaskById(taskId)) as Task;
+    }
+
+    async getTasksByUserId(userId: string): Promise<Task[]> {
+        if (!this.db) throw new Error("Database not initialized");
+
+        const rows = await this.db.all("SELECT * FROM tasks WHERE userId = ?", [
+            userId,
+        ]);
+
         return rows.map((row: any) => ({
             id: row.id,
             name: row.name,
@@ -453,161 +1115,207 @@ class DatabaseService {
             attendees: row.attendees ? JSON.parse(row.attendees) : undefined,
             recurrenceRule: row.recurrenceRule || undefined,
             parentTaskId: row.parentTaskId || undefined,
-            importance: row.importance || 'normal',
-            scheduleType: row.scheduleType || 'single'
+            importance: this.normalizeImportance(row.importance),
+            scheduleType: row.scheduleType || "single",
         }));
     }
 
     // 分页 / 过滤查询：用于高性能列出任务
-    async getTasksPage(userId: string, opts?: {
-        start?: string;
-        end?: string;
-        q?: string;
-        completed?: boolean;
-        limit?: number;
-        offset?: number;
-        sortBy?: string;
-        order?: 'asc' | 'desc';
-    }): Promise<{ tasks: Task[]; total: number }> {
-        if (!this.db) throw new Error('Database not initialized');
-        const where: string[] = ['userId = ?'];
+    async getTasksPage(
+        userId: string,
+        opts?: {
+            start?: string;
+            end?: string;
+            q?: string;
+            completed?: boolean;
+            limit?: number;
+            offset?: number;
+            sortBy?: string;
+            order?: "asc" | "desc";
+        },
+    ): Promise<{ tasks: Task[]; total: number }> {
+        if (!this.db) throw new Error("Database not initialized");
+        const where: string[] = ["userId = ?"];
         const params: any[] = [userId];
         if (opts?.start) {
-            where.push('endTime >= ?');
+            where.push("endTime >= ?");
             params.push(opts.start);
         }
         if (opts?.end) {
-            where.push('startTime <= ?');
+            where.push("startTime <= ?");
             params.push(opts.end);
         }
-        if (typeof opts?.completed === 'boolean') {
-            where.push('completed = ?');
+        if (typeof opts?.completed === "boolean") {
+            where.push("completed = ?");
             params.push(opts.completed ? 1 : 0);
         }
         if (opts?.q) {
             const like = `%${opts.q.toLowerCase()}%`;
-            where.push('(LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(location) LIKE ?)');
+            where.push(
+                "(LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(location) LIKE ?)",
+            );
             params.push(like, like, like);
         }
 
-        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-        const sortField = ['startTime', 'dueDate', 'name', 'endTime'].includes(opts?.sortBy || '') ? opts!.sortBy : 'startTime';
-        const order = opts?.order === 'desc' ? 'DESC' : 'ASC';
+        const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+        const sortField = ["startTime", "dueDate", "name", "endTime"].includes(
+            opts?.sortBy || "",
+        )
+            ? opts!.sortBy
+            : "startTime";
+        const order = opts?.order === "desc" ? "DESC" : "ASC";
         const limit = Math.max(1, Math.min(500, opts?.limit || 50));
         const offset = Math.max(0, opts?.offset || 0);
 
         // count
         const countSql = `SELECT COUNT(*) as cnt FROM tasks ${whereSql}`;
         const countRow: any = await this.db.get(countSql, params);
-        const total = countRow ? (countRow.cnt || 0) : 0;
+        const total = countRow ? countRow.cnt || 0 : 0;
 
         // select with ordering and pagination
         const sql = `SELECT * FROM tasks ${whereSql} ORDER BY ${sortField} ${order} LIMIT ? OFFSET ?`;
         const finalParams = params.concat([limit, offset]);
         const rows = await this.db.all(sql, finalParams);
-        const tasks = rows.map((row: any) => ({
-            id: row.id,
-            name: row.name,
-            description: row.description,
-            dueDate: row.dueDate,
-            startTime: row.startTime,
-            endTime: row.endTime,
-            location: row.location,
-            completed: row.completed === 1,
-            pushedToMSTodo: row.pushedToMSTodo === 1,
-            body: row.body,
-            attendees: row.attendees ? JSON.parse(row.attendees) : undefined,
-            recurrenceRule: row.recurrenceRule || undefined,
-            parentTaskId: row.parentTaskId || undefined,
-            importance: row.importance || 'normal',
-            scheduleType: row.scheduleType || 'single'
-        } as Task));
+        const tasks = rows.map(
+            (row: any) =>
+                ({
+                    id: row.id,
+                    name: row.name,
+                    description: row.description,
+                    dueDate: row.dueDate,
+                    startTime: row.startTime,
+                    endTime: row.endTime,
+                    location: row.location,
+                    completed: row.completed === 1,
+                    pushedToMSTodo: row.pushedToMSTodo === 1,
+                    body: row.body,
+                    attendees: row.attendees
+                        ? JSON.parse(row.attendees)
+                        : undefined,
+                    recurrenceRule: row.recurrenceRule || undefined,
+                    parentTaskId: row.parentTaskId || undefined,
+                    importance: this.normalizeImportance(row.importance),
+                    scheduleType: row.scheduleType || "single",
+                }) as Task,
+        );
 
         return { tasks, total };
     }
 
     // 分页获取某根任务的子实例（occurrences）
-    async getOccurrencesPage(userId: string, rootTaskId: string, opts?: { limit?: number; offset?: number; sortBy?: string; order?: 'asc' | 'desc' }): Promise<{ occurrences: Task[]; total: number }> {
-        if (!this.db) throw new Error('Database not initialized');
-        const where: string[] = ['userId = ?', 'parentTaskId = ?'];
+    async getOccurrencesPage(
+        userId: string,
+        rootTaskId: string,
+        opts?: {
+            limit?: number;
+            offset?: number;
+            sortBy?: string;
+            order?: "asc" | "desc";
+        },
+    ): Promise<{ occurrences: Task[]; total: number }> {
+        if (!this.db) throw new Error("Database not initialized");
+        const where: string[] = ["userId = ?", "parentTaskId = ?"];
         const params: any[] = [userId, rootTaskId];
-        const whereSql = `WHERE ${where.join(' AND ')}`;
-        const sortField = ['startTime', 'dueDate', 'name', 'endTime'].includes(opts?.sortBy || '') ? opts!.sortBy : 'startTime';
-        const order = opts?.order === 'desc' ? 'DESC' : 'ASC';
+        const whereSql = `WHERE ${where.join(" AND ")}`;
+        const sortField = ["startTime", "dueDate", "name", "endTime"].includes(
+            opts?.sortBy || "",
+        )
+            ? opts!.sortBy
+            : "startTime";
+        const order = opts?.order === "desc" ? "DESC" : "ASC";
         const limit = Math.max(1, Math.min(500, opts?.limit || 50));
         const offset = Math.max(0, opts?.offset || 0);
 
         const countSql = `SELECT COUNT(*) as cnt FROM tasks ${whereSql}`;
         const countRow: any = await this.db.get(countSql, params);
-        const total = countRow ? (countRow.cnt || 0) : 0;
+        const total = countRow ? countRow.cnt || 0 : 0;
 
         const sql = `SELECT * FROM tasks ${whereSql} ORDER BY ${sortField} ${order} LIMIT ? OFFSET ?`;
         const rows = await this.db.all(sql, params.concat([limit, offset]));
-        const occurrences = rows.map((row: any) => ({
-            id: row.id,
-            name: row.name,
-            description: row.description,
-            dueDate: row.dueDate,
-            startTime: row.startTime,
-            endTime: row.endTime,
-            location: row.location,
-            completed: row.completed === 1,
-            pushedToMSTodo: row.pushedToMSTodo === 1,
-            body: row.body,
-            attendees: row.attendees ? JSON.parse(row.attendees) : undefined,
-            recurrenceRule: row.recurrenceRule || undefined,
-            parentTaskId: row.parentTaskId || undefined,
-            importance: row.importance || 'normal',
-            scheduleType: row.scheduleType || 'single'
-        } as Task));
+        const occurrences = rows.map(
+            (row: any) =>
+                ({
+                    id: row.id,
+                    name: row.name,
+                    description: row.description,
+                    dueDate: row.dueDate,
+                    startTime: row.startTime,
+                    endTime: row.endTime,
+                    location: row.location,
+                    completed: row.completed === 1,
+                    pushedToMSTodo: row.pushedToMSTodo === 1,
+                    body: row.body,
+                    attendees: row.attendees
+                        ? JSON.parse(row.attendees)
+                        : undefined,
+                    recurrenceRule: row.recurrenceRule || undefined,
+                    parentTaskId: row.parentTaskId || undefined,
+                    importance: this.normalizeImportance(row.importance),
+                    scheduleType: row.scheduleType || "single",
+                }) as Task,
+        );
 
         return { occurrences, total };
     }
 
     // 刷新内存中的 user.tasks 缓存
     async refreshUserTasks(user: any): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
-        if (!user || !user.id) throw new Error('Invalid user');
+        if (!this.db) throw new Error("Database not initialized");
+        if (!user || !user.id) throw new Error("Invalid user");
         const tasks = await this.getTasksByUserId(user.id);
         user.tasks = tasks;
     }
 
     // 根据指定的 id 列表获取任务
     async getTasksByIds(userId: string, ids: string[]): Promise<Task[]> {
-        if (!this.db) throw new Error('Database not initialized');
+        if (!this.db) throw new Error("Database not initialized");
         if (!ids || ids.length === 0) return [];
-        const placeholders = ids.map(() => '?').join(',');
+        const placeholders = ids.map(() => "?").join(",");
         const sql = `SELECT * FROM tasks WHERE userId = ? AND id IN (${placeholders})`;
         const rows = await this.db.all(sql, [userId, ...ids]);
-        return rows.map((row: any) => ({
-            id: row.id,
-            name: row.name,
-            description: row.description,
-            dueDate: row.dueDate,
-            startTime: row.startTime,
-            endTime: row.endTime,
-            location: row.location,
-            completed: row.completed === 1,
-            pushedToMSTodo: row.pushedToMSTodo === 1,
-            body: row.body,
-            attendees: row.attendees ? JSON.parse(row.attendees) : undefined,
-            recurrenceRule: row.recurrenceRule || undefined,
-            parentTaskId: row.parentTaskId || undefined,
-            importance: row.importance || 'normal',
-            scheduleType: row.scheduleType || 'single'
-        } as Task));
+        return rows.map(
+            (row: any) =>
+                ({
+                    id: row.id,
+                    name: row.name,
+                    description: row.description,
+                    dueDate: row.dueDate,
+                    startTime: row.startTime,
+                    endTime: row.endTime,
+                    location: row.location,
+                    completed: row.completed === 1,
+                    pushedToMSTodo: row.pushedToMSTodo === 1,
+                    body: row.body,
+                    attendees: row.attendees
+                        ? JSON.parse(row.attendees)
+                        : undefined,
+                    recurrenceRule: row.recurrenceRule || undefined,
+                    parentTaskId: row.parentTaskId || undefined,
+                    importance: this.normalizeImportance(row.importance),
+                    scheduleType: row.scheduleType || "single",
+                }) as Task,
+        );
     }
 
     // 增量刷新用户缓存：仅合并新增/更新并移除已删除
-    async refreshUserTasksIncremental(user: any, opts?: { addedIds?: string[]; updatedIds?: string[]; deletedIds?: string[] }): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
-        if (!user || !user.id) throw new Error('Invalid user');
+    async refreshUserTasksIncremental(
+        user: any,
+        opts?: {
+            addedIds?: string[];
+            updatedIds?: string[];
+            deletedIds?: string[];
+        },
+    ): Promise<void> {
+        if (!this.db) throw new Error("Database not initialized");
+        if (!user || !user.id) throw new Error("Invalid user");
         user.tasks = user.tasks || [];
 
         // 处理删除：移除缓存中的 deletedIds
         if (opts?.deletedIds && opts.deletedIds.length > 0) {
             const delSet = new Set(opts.deletedIds);
-            user.tasks = (user.tasks || []).filter((t: Task) => !delSet.has(t.id));
+            user.tasks = (user.tasks || []).filter(
+                (t: Task) => !delSet.has(t.id),
+            );
         }
 
         // 处理新增/更新：从 DB 中拉取这些 id 的最新记录并合并到缓存
@@ -630,8 +1338,8 @@ class DatabaseService {
     }
 
     async getTaskById(id: string): Promise<Task | null> {
-        if (!this.db) throw new Error('Database not initialized');
-        const row = await this.db.get('SELECT * FROM tasks WHERE id = ?', [id]);
+        if (!this.db) throw new Error("Database not initialized");
+        const row = await this.db.get("SELECT * FROM tasks WHERE id = ?", [id]);
         if (!row) return null;
         return {
             id: row.id,
@@ -647,47 +1355,71 @@ class DatabaseService {
             attendees: row.attendees ? JSON.parse(row.attendees) : undefined,
             recurrenceRule: row.recurrenceRule || undefined,
             parentTaskId: row.parentTaskId || undefined,
-            importance: row.importance || 'normal',
-            scheduleType: row.scheduleType || 'single'
+            importance: this.normalizeImportance(row.importance),
+            scheduleType: row.scheduleType || "single",
         } as Task;
     }
 
     async deleteTask(id: string): Promise<boolean> {
-        if (!this.db) throw new Error('Database not initialized');
-        
+        if (!this.db) throw new Error("Database not initialized");
+
         // Get userId for logging before deletion
-        const row = await this.db.get('SELECT userId FROM tasks WHERE id = ?', [id]);
+        const row = await this.db.get("SELECT userId FROM tasks WHERE id = ?", [
+            id,
+        ]);
         const userId = row ? row.userId : null;
 
-        const result: any = await this.db.run('DELETE FROM tasks WHERE id = ?', [id]);
+        const result: any = await this.db.run(
+            "DELETE FROM tasks WHERE id = ?",
+            [id],
+        );
         const success = (result?.changes || 0) > 0;
 
         if (success && userId) {
-            await this.addUserLog(userId, 'task_deleted', `Deleted task ${id}`, { taskId: id });
+            await this.addUserLog(
+                userId,
+                "task_deleted",
+                `Deleted task ${id}`,
+                { taskId: id },
+            );
         }
 
         return success;
     }
-    
-    async deleteTasksByPattern(userId: string, pattern: string): Promise<number> {
-        if (!this.db) throw new Error('Database not initialized');
-        
+
+    async deleteTasksByPattern(
+        userId: string,
+        pattern: string,
+    ): Promise<number> {
+        if (!this.db) throw new Error("Database not initialized");
+
         // Get IDs to be deleted for logging
-        const rows = await this.db.all('SELECT id FROM tasks WHERE userId = ? AND id LIKE ?', [userId, pattern]);
+        const rows = await this.db.all(
+            "SELECT id FROM tasks WHERE userId = ? AND id LIKE ?",
+            [userId, pattern],
+        );
         const ids = rows.map((r: any) => r.id);
-        
+
         if (ids.length === 0) return 0;
 
-        const result: any = await this.db.run('DELETE FROM tasks WHERE userId = ? AND id LIKE ?', [userId, pattern]);
+        const result: any = await this.db.run(
+            "DELETE FROM tasks WHERE userId = ? AND id LIKE ?",
+            [userId, pattern],
+        );
         const count = result?.changes || 0;
 
         if (count > 0) {
-            await this.addUserLog(userId, 'tasks_deleted_pattern', `Deleted ${count} tasks matching pattern ${pattern}`, { pattern, count, deletedIds: ids });
+            await this.addUserLog(
+                userId,
+                "tasks_deleted_pattern",
+                `Deleted ${count} tasks matching pattern ${pattern}`,
+                { pattern, count, deletedIds: ids },
+            );
         }
 
         return count;
     }
-    
+
     private mapRowToUser(row: any, tasks: Task[]): User {
         return {
             id: row.id,
@@ -704,75 +1436,285 @@ class DatabaseService {
             ExchangeRefreshToken: row.ExchangeRefreshToken,
             ExchangeTokenExpiresAt: row.ExchangeTokenExpiresAt,
             ExchangeBinded: row.ExchangeBinded === 1,
-            SmtpBinded: row.SmtpBinded === 1,
-            SmtpEmail: row.SmtpEmail,
-            SmtpPassword: row.SmtpPassword,
-            SmtpHost: row.SmtpHost,
-            SmtpPort: row.SmtpPort,
-            SmtpTls: row.SmtpTls === 1,
+            ImapBinded: row.ImapBinded === 1,
+            ImapEmail: row.ImapEmail,
+            ImapPassword: row.ImapPassword,
+            ImapHost: row.ImapHost,
+            ImapPort: row.ImapPort,
+            ImapTls: row.ImapTls === 1,
             CAFSub: row.CAFSub,
             CAFAccessToken: row.CAFAccessToken,
+            CAFRefreshToken: row.CAFRefreshToken,
             CAFTokenExpiresAt: row.CAFTokenExpiresAt,
+            CalDavBaseUrl: row.CalDavBaseUrl,
+            CalDavUsername: row.CalDavUsername,
+            CalDavPassword: row.CalDavPassword,
+            CalDavPrincipalUrl: row.CalDavPrincipalUrl,
+            CalDavCalendarHome: row.CalDavCalendarHome,
+            CalDavCalendarUrl: row.CalDavCalendarUrl,
+            CalDavSyncToken: row.CalDavSyncToken,
+            CalDavEnabled: row.CalDavEnabled === 1,
+            CalDavServerEnabled: row.CalDavServerEnabled === 1,
+            CalDavLastSyncAt: row.CalDavLastSyncAt,
             ebridgeBinded: row.ebridgeBinded === 1,
-            timetableUrl: row.timetableUrl || '',
+            timetableUrl: row.timetableUrl || "",
             timetableFetchLevel: row.timetableFetchLevel || 0,
             mailReadingSpan: row.mailReadingSpan ?? 30,
             conflictBoundaryInclusive: row.conflictBoundaryInclusive === 1,
             weekOffset: row.weekOffset || 0,
-            highEnergyPeriods: row.highEnergyPeriods ? JSON.parse(row.highEnergyPeriods) : {},
+            highEnergyPeriods: row.highEnergyPeriods
+                ? JSON.parse(row.highEnergyPeriods)
+                : {},
             tasks: tasks,
-            emsClient: undefined // 运行时生成，不持久化
-            
+            emsClient: undefined, // 运行时生成，不持久化
         };
     }
 
-    async updateUserHighEnergyPeriods(userId: string, periods: Record<number, any[]>): Promise<void> {
-        if (!this.db) throw new Error('Database not initialized');
+    /**
+     * 管理员专用：按字段白名单直接更新用户列。
+     * updates: { columnName: value, ... }
+     * 列名白名单由 AMIN_ALLOWED_COLUMNS 控制。
+     */
+    private static readonly ADMIN_ALLOWED_COLUMNS = new Set([
+        "email",
+        "name",
+        "XJTLUaccount",
+        "XJTLUPassword",
+        "passwordHash",
+        "JWTtoken",
+        "MStoken",
+        "MSRefreshToken",
+        "MSbinded",
+        "ExchangeAccessToken",
+        "ExchangeRefreshToken",
+        "ExchangeTokenExpiresAt",
+        "ExchangeBinded",
+        "ImapBinded",
+        "ImapEmail",
+        "ImapPassword",
+        "ImapHost",
+        "ImapPort",
+        "ImapTls",
+        "CAFSub",
+        "CAFAccessToken",
+        "CAFRefreshToken",
+        "CAFTokenExpiresAt",
+        "ebridgeBinded",
+        "timetableUrl",
+        "timetableFetchLevel",
+        "mailReadingSpan",
+        "conflictBoundaryInclusive",
+        "weekOffset",
+        "CalDavBaseUrl",
+        "CalDavUsername",
+        "CalDavPassword",
+        "CalDavPrincipalUrl",
+        "CalDavCalendarHome",
+        "CalDavCalendarUrl",
+        "CalDavEnabled",
+        "CalDavLastSyncAt",
+        "CalDavServerEnabled",
+        "highEnergyPeriods",
+    ]);
+
+    async adminUpdateUserFields(
+        userId: string,
+        updates: Record<string, any>,
+    ): Promise<void> {
+        if (!this.db) throw new Error("Database not initialized");
+
+        const setClauses: string[] = [];
+        const values: any[] = [];
+
+        for (const [key, value] of Object.entries(updates)) {
+            if (!DatabaseService.ADMIN_ALLOWED_COLUMNS.has(key)) {
+                throw new Error(`不允许更新列: ${key}`);
+            }
+            setClauses.push(`${key} = ?`);
+            values.push(value);
+        }
+
+        if (setClauses.length === 0) return;
+
+        setClauses.push("updatedAt = CURRENT_TIMESTAMP");
+        const sql = `UPDATE users SET ${setClauses.join(", ")} WHERE id = ?`;
+        values.push(userId);
+
+        await this.db.run(sql, values);
+    }
+
+    async deleteUser(userId: string): Promise<boolean> {
+        if (!this.db) throw new Error("Database not initialized");
+
+        // 先删除用户的所有日程
+        await this.db.run("DELETE FROM tasks WHERE userId = ?", [userId]);
+        // 删除用户的日历映射
+        await this.db.run("DELETE FROM calendar_event_map WHERE userId = ?", [
+            userId,
+        ]);
+        // 删除用户的调度队列
+        await this.db.run("DELETE FROM schedule_queue WHERE userId = ?", [
+            userId,
+        ]);
+        // 删除用户日志
+        await this.db.run("DELETE FROM user_logs WHERE userId = ?", [userId]);
+        // 最后删除用户
+        const result = await this.db.run("DELETE FROM users WHERE id = ?", [
+            userId,
+        ]);
+        return result.changes > 0;
+    }
+
+    async updateUserHighEnergyPeriods(
+        userId: string,
+        periods: Record<number, any[]>,
+    ): Promise<void> {
+        if (!this.db) throw new Error("Database not initialized");
         await this.db.run(
-            'UPDATE users SET highEnergyPeriods = ? WHERE id = ?',
-            [JSON.stringify(periods), userId]
+            "UPDATE users SET highEnergyPeriods = ? WHERE id = ?",
+            [JSON.stringify(periods), userId],
         );
     }
 
-                /**
-             * 查询指定用户的日程队列
-             */
-            async getScheduleQueueByUser(userId: string) {
-                if (!this.db) throw new Error('DB not initialized');
-                const rows = await this.db.all(`SELECT * FROM schedule_queue WHERE userId = ? ORDER BY createdAt DESC`, [userId]);
-                return rows;
-            }
+    async getCalendarEventMapByLocalId(
+        userId: string,
+        provider: string,
+        localTaskId: string,
+    ) {
+        if (!this.db) throw new Error("DB not initialized");
+        const row: any = await this.db.get(
+            `SELECT * FROM calendar_event_map WHERE userId = ? AND provider = ? AND localTaskId = ?`,
+            [userId, provider, localTaskId],
+        );
+        return row || null;
+    }
 
-            async getScheduleQueueById(id: string) {
-                if (!this.db) throw new Error('DB not initialized');
-                const row: any = await this.db.get(`SELECT * FROM schedule_queue WHERE id = ?`, [id]);
-                return row;
-            }
+    async getCalendarEventMapByRemoteUid(
+        userId: string,
+        provider: string,
+        remoteUid: string,
+    ) {
+        if (!this.db) throw new Error("DB not initialized");
+        const row: any = await this.db.get(
+            `SELECT * FROM calendar_event_map WHERE userId = ? AND provider = ? AND remoteUid = ?`,
+            [userId, provider, remoteUid],
+        );
+        return row || null;
+    }
 
-            async updateScheduleQueueStatus(id: string, status: string) {
-                if (!this.db) throw new Error('DB not initialized');
-                await this.db.run(`UPDATE schedule_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [status, id]);
-            }
-
-            async deleteScheduleQueueItem(id: string) {
-                if (!this.db) throw new Error('DB not initialized');
-                await this.db.run(`DELETE FROM schedule_queue WHERE id = ?`, [id]);
-            }
-        /**
-         * 将日程请求加入队列
-         * @param userId 用户ID
-         * @param rawRequest 原始请求内容（JSON字符串）
-         */
-        async addScheduleToQueue(userId: string, rawRequest: string) {
-            if (!this.db) throw new Error('DB not initialized');
+    async upsertCalendarEventMap(entry: {
+        userId: string;
+        provider: string;
+        localTaskId: string;
+        remoteUid?: string;
+        remoteHref?: string;
+        remoteEtag?: string;
+        calendarUrl?: string;
+        rawData?: string;
+    }) {
+        if (!this.db) throw new Error("DB not initialized");
+        const existing: any = await this.db.get(
+            `SELECT id FROM calendar_event_map WHERE userId = ? AND provider = ? AND localTaskId = ?`,
+            [entry.userId, entry.provider, entry.localTaskId],
+        );
+        if (existing?.id) {
+            await this.db.run(
+                `UPDATE calendar_event_map
+                 SET remoteUid = ?, remoteHref = ?, remoteEtag = ?, calendarUrl = ?, rawData = ?, updatedAt = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [
+                    entry.remoteUid,
+                    entry.remoteHref,
+                    entry.remoteEtag,
+                    entry.calendarUrl,
+                    entry.rawData,
+                    existing.id,
+                ],
+            );
+        } else {
             const id = uuidv4();
-            await this.db.run(`
+            await this.db.run(
+                `INSERT INTO calendar_event_map
+                 (id, userId, provider, localTaskId, remoteUid, remoteHref, remoteEtag, calendarUrl, rawData)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    id,
+                    entry.userId,
+                    entry.provider,
+                    entry.localTaskId,
+                    entry.remoteUid,
+                    entry.remoteHref,
+                    entry.remoteEtag,
+                    entry.calendarUrl,
+                    entry.rawData,
+                ],
+            );
+        }
+    }
+
+    async deleteCalendarEventMapByLocalId(
+        userId: string,
+        provider: string,
+        localTaskId: string,
+    ) {
+        if (!this.db) throw new Error("DB not initialized");
+        await this.db.run(
+            `DELETE FROM calendar_event_map WHERE userId = ? AND provider = ? AND localTaskId = ?`,
+            [userId, provider, localTaskId],
+        );
+    }
+
+    /**
+     * 查询指定用户的日程队列
+     */
+    async getScheduleQueueByUser(userId: string) {
+        if (!this.db) throw new Error("DB not initialized");
+        const rows = await this.db.all(
+            `SELECT * FROM schedule_queue WHERE userId = ? ORDER BY createdAt DESC`,
+            [userId],
+        );
+        return rows;
+    }
+
+    async getScheduleQueueById(id: string) {
+        if (!this.db) throw new Error("DB not initialized");
+        const row: any = await this.db.get(
+            `SELECT * FROM schedule_queue WHERE id = ?`,
+            [id],
+        );
+        return row;
+    }
+
+    async updateScheduleQueueStatus(id: string, status: string) {
+        if (!this.db) throw new Error("DB not initialized");
+        await this.db.run(
+            `UPDATE schedule_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
+            [status, id],
+        );
+    }
+
+    async deleteScheduleQueueItem(id: string) {
+        if (!this.db) throw new Error("DB not initialized");
+        await this.db.run(`DELETE FROM schedule_queue WHERE id = ?`, [id]);
+    }
+    /**
+     * 将日程请求加入队列
+     * @param userId 用户ID
+     * @param rawRequest 原始请求内容（JSON字符串）
+     */
+    async addScheduleToQueue(userId: string, rawRequest: string) {
+        if (!this.db) throw new Error("DB not initialized");
+        const id = uuidv4();
+        await this.db.run(
+            `
                 INSERT INTO schedule_queue (id, userId, rawRequest, status, createdAt, updatedAt)
                 VALUES (?, ?, ?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            `, [id, userId, rawRequest]);
-            return id;
-        }
-    
+            `,
+            [id, userId, rawRequest],
+        );
+        return id;
+    }
+
     async close() {
         if (this.db) {
             await this.db.close();

@@ -244,15 +244,11 @@
   padding: 15px;
   border-radius: 8px;
   border-left: 4px solid transparent;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: none;
   display: flex;
   flex-direction: column;
 }
 
-.task-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-}
 
 .status-active .task-card { border-left-color: var(--color-timeline-dot-active); background: var(--color-task-card-active-bg); }
 .status-completed .task-card { border-left-color: var(--color-timeline-dot-completed); opacity: 0.7; }

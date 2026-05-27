@@ -5,6 +5,7 @@ import { IEmail } from './types';
 import { getOpenAITools } from './mcp';
 import { MCPToolNames, type MCPToolNameTypes } from '../Services/mcpTypes.js';
 import { toShanghaiISO } from '../Utils/time.js';
+import { isScheduleType, resolveScheduleType, scheduleTypeValues } from './types.js';
 
 // 定义邮件处理请求和响应接口
 export interface EmailProcessRequest {
@@ -100,6 +101,8 @@ export class LLMApi {
 - 你必须从邮件中提取任务名称(name)、开始时间(startTime)和结束时间(endTime)。
 - 如果邮件中只提到截止日期(Due date)，请将开始时间和结束时间设置为同一时间。
 - 如果邮件仅包含信息通知，不需要采取行动，请调用 'log_info'。
+- 你必须提供正确的 scheduleType，且只能是以下值之一: ${scheduleTypeValues.join(' | ')}。
+- 若没有重复规则，请设置 scheduleType 为 single；若提供 recurrenceRule，请根据其 freq 选择匹配的 scheduleType。
 - 确保提取的时间格式为 ISO 8601,使用中国上海时区。例如: 2023-03-15T10:00:00+08:00。`
 
                 },
@@ -126,8 +129,9 @@ export class LLMApi {
             if (message.tool_calls && message.tool_calls.length > 0) {
                 const toolCall = message.tool_calls[0] as any;
                 logger.success(`邮件处理成功，触发工具调用: ${toolCall.function.name}`);
+                const validatedToolCalls = await this.ensureValidScheduleType(email, message.tool_calls as any[]);
                 return {
-                    tool_calls: message.tool_calls
+                    tool_calls: validatedToolCalls
                 };
             }
 
@@ -163,6 +167,83 @@ export class LLMApi {
                 }]
             };
         }
+    }
+
+    private parseToolArgs(raw: any): any | null {
+        if (!raw) return null;
+        try {
+            return typeof raw === 'string' ? JSON.parse(raw) : raw;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    private async ensureValidScheduleType(email: IEmail, toolCalls: any[]): Promise<any[]> {
+        const addScheduleIndex = toolCalls.findIndex(tc => tc?.function?.name === MCPToolNames.AddSchedule);
+        if (addScheduleIndex === -1) return toolCalls;
+
+        const call = toolCalls[addScheduleIndex];
+        const parsed = this.parseToolArgs(call?.function?.arguments);
+        if (!parsed) return toolCalls;
+
+        const scheduleType = parsed.scheduleType;
+        const hasValid = isScheduleType(scheduleType);
+        if (hasValid) return toolCalls;
+
+        logger.warn(`LLM returned invalid or missing scheduleType, retrying once. value=${scheduleType}`);
+
+        const repaired = await this.retryScheduleType(email, parsed);
+        const repairedCall = repaired?.tool_calls?.find((tc: any) => tc?.function?.name === MCPToolNames.AddSchedule);
+        if (repairedCall) {
+            const repairedArgs = this.parseToolArgs(repairedCall?.function?.arguments);
+            if (repairedArgs && isScheduleType(repairedArgs.scheduleType)) {
+                toolCalls[addScheduleIndex] = repairedCall;
+                return toolCalls;
+            }
+        }
+
+        const fallbackType = this.getFallbackScheduleType(parsed);
+        parsed.scheduleType = fallbackType;
+        call.function.arguments = JSON.stringify(parsed);
+        logger.warn(`ScheduleType auto-corrected to ${fallbackType} after retry failure.`);
+        return toolCalls;
+    }
+
+    private getFallbackScheduleType(args: any) {
+        try {
+            return resolveScheduleType({ explicit: undefined, recurrence: args?.recurrenceRule, fallback: 'single' }).scheduleType;
+        } catch (e) {
+            return 'single';
+        }
+    }
+
+    private async retryScheduleType(email: IEmail, previousArgs: any): Promise<any> {
+        const tools = [
+            ...getOpenAITools().filter(t => t.function?.name === MCPToolNames.AddSchedule)
+        ];
+
+        const messages = [
+            {
+                role: 'system',
+                content: `你是一个日程抽取助手。你必须调用 add_schedule。
+- 只允许的 scheduleType 值: ${scheduleTypeValues.join(' | ')}。
+- 仅修正 scheduleType，保持其它字段与提供的值一致。`
+            },
+            {
+                role: 'user',
+                content: `邮件内容如下，请仅修正 scheduleType：\n${this.generateEmailProcessingPrompt(email)}\n\n已提取的参数：${JSON.stringify(previousArgs)}`
+            }
+        ];
+
+        const response = await this.openai.chat.completions.create({
+            model: this.model,
+            messages: messages as any,
+            tools: tools as any,
+            tool_choice: "required",
+            temperature: 0.2,
+        });
+
+        return response.choices[0].message;
     }
 
     /**

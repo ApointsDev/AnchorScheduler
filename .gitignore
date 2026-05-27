@@ -39,3 +39,4 @@ docker-build.ps1
 docker-run.sh
 docker-run.ps1
 *.zip
+.deepseek/

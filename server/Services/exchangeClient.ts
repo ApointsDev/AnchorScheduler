@@ -29,18 +29,18 @@ import {
     Importance,
     ConflictResolutionMode,
     StringList,
-} from 'ews-javascript-api';
-import axios from 'axios';
-import { ExchangeConfig, IEmail, IEvent } from './types';
-import { logger } from '../Utils/logger.js';
-import moment from 'moment-timezone';
-import { LLMApi } from './LLMApi.js';
-import { createTodoItem } from './MStodo.js';
-import { User, Task } from '../index.js';
-import { v4 as uuidv4 } from 'uuid';
-import { mcpTools } from './mcp.js';
-import { dbService } from './dbService.js';
-import toShanghaiISO from '../Utils/time.js';
+} from "ews-javascript-api";
+import axios from "axios";
+import { ExchangeConfig, IEmail, IEvent } from "./types";
+import { logger } from "../Utils/logger.js";
+import moment from "moment-timezone";
+import { LLMApi } from "./LLMApi.js";
+import { createTodoItem } from "./MStodo.js";
+import { User, Task } from "../index.js";
+import { v4 as uuidv4 } from "uuid";
+import { mcpTools } from "./mcp.js";
+import { dbService } from "./dbService.js";
+import toShanghaiISO from "../Utils/time.js";
 
 // 以下代码将禁用 SSL/TLS 证书验证。
 // 如果您的 Exchange 服务器使用自签名证书，则需要此设置。
@@ -52,7 +52,7 @@ moment.tz.setDefault("Asia/Shanghai");
 export class ExchangeClient {
     private config: ExchangeConfig;
     private service: ExchangeService;
-    private authMode: 'ews' | 'graph';
+    private authMode: "ews" | "graph";
     private streamingSubscription: StreamingSubscription | null = null;
     private streamingConnection: StreamingSubscriptionConnection | null = null;
     private healthCheckTimer: NodeJS.Timeout | null = null;
@@ -61,162 +61,226 @@ export class ExchangeClient {
     private processedMessageIds: Set<string> = new Set();
     private tokenRefreshTimer: NodeJS.Timeout | null = null;
 
-    private static readonly GRAPH_BASE_URL = 'https://graph.microsoft.com/v1.0';
+    private static readonly GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 
     private shouldUseGraphAuth(config: ExchangeConfig): boolean {
-        const normalizedScope = (config.scope || '').toLowerCase();
-        if (normalizedScope.includes('graph.microsoft.com')) {
+        const normalizedScope = (config.scope || "").toLowerCase();
+        if (normalizedScope.includes("graph.microsoft.com")) {
             return true;
         }
-        if (normalizedScope.includes('outlook.office365.com/ews.accessasuser.all')) {
+        if (
+            normalizedScope.includes(
+                "outlook.office365.com/ews.accessasuser.all",
+            )
+        ) {
             return false;
         }
-        return (process.env.EXCHANGE_AUTH_MODE || '').toLowerCase() === 'graph';
+        return (process.env.EXCHANGE_AUTH_MODE || "").toLowerCase() === "graph";
     }
 
     private getGraphHeaders() {
         if (!this.config.oauthToken) {
-            throw new Error('Graph mode requires oauthToken.');
+            throw new Error("Graph mode requires oauthToken.");
         }
         return {
             Authorization: `Bearer ${this.config.oauthToken}`,
-            'Content-Type': 'application/json'
+            "Content-Type": "application/json",
         };
     }
 
-    private toGraphDateTime(dateValue: string): { dateTime: string; timeZone: string } {
+    private toGraphDateTime(dateValue: string): {
+        dateTime: string;
+        timeZone: string;
+    } {
         const iso = new Date(dateValue).toISOString();
         return {
-            dateTime: iso.replace('Z', ''),
-            timeZone: 'UTC'
+            dateTime: iso.replace("Z", ""),
+            timeZone: "UTC",
         };
     }
 
-    private parseGraphDateTime(value?: { dateTime?: string; timeZone?: string }): string {
+    private parseGraphDateTime(value?: {
+        dateTime?: string;
+        timeZone?: string;
+    }): string {
         if (!value?.dateTime) return toShanghaiISO();
-        const normalized = value.dateTime.endsWith('Z') ? value.dateTime : `${value.dateTime}Z`;
+        const normalized = value.dateTime.endsWith("Z")
+            ? value.dateTime
+            : `${value.dateTime}Z`;
         return toShanghaiISO(new Date(normalized).toISOString());
     }
 
     private parseEmailFromGraph(message: any, includeBody: boolean): IEmail {
         return {
             id: message.id,
-            subject: message.subject || '(无主题)',
+            subject: message.subject || "(无主题)",
             from: message.from?.emailAddress
                 ? {
-                    name: message.from.emailAddress.name || message.from.emailAddress.address || '',
-                    address: message.from.emailAddress.address || ''
-                }
+                      name:
+                          message.from.emailAddress.name ||
+                          message.from.emailAddress.address ||
+                          "",
+                      address: message.from.emailAddress.address || "",
+                  }
                 : undefined,
-            receivedAt: toShanghaiISO(message.receivedDateTime || new Date().toISOString()),
+            receivedAt: toShanghaiISO(
+                message.receivedDateTime || new Date().toISOString(),
+            ),
             isRead: !!message.isRead,
-            body: includeBody ? this.cleanHtmlContent(message.body?.content || '') : undefined,
+            body: includeBody
+                ? this.cleanHtmlContent(message.body?.content || "")
+                : undefined,
             hasAttachments: !!message.hasAttachments,
         };
     }
 
     private parseEventFromGraph(event: any): IEvent {
-        const importanceMap: Record<string, 'high' | 'normal' | 'low'> = {
-            high: 'high',
-            normal: 'normal',
-            low: 'low'
+        const importanceMap: Record<string, "high" | "normal" | "low"> = {
+            high: "high",
+            normal: "normal",
+            low: "low",
         };
         return {
             id: event.id,
-            subject: event.subject || '(无主题)',
+            subject: event.subject || "(无主题)",
             start: this.parseGraphDateTime(event.start),
             end: this.parseGraphDateTime(event.end),
-            location: event.location?.displayName || '',
-            body: this.cleanHtmlContent(event.body?.content || ''),
+            location: event.location?.displayName || "",
+            body: this.cleanHtmlContent(event.body?.content || ""),
             attendees: Array.isArray(event.attendees)
                 ? event.attendees
-                    .map((a: any) => a?.emailAddress?.address)
-                    .filter((address: string | undefined): address is string => !!address)
+                      .map((a: any) => a?.emailAddress?.address)
+                      .filter(
+                          (address: string | undefined): address is string =>
+                              !!address,
+                      )
                 : [],
-            importance: importanceMap[(event.importance || 'normal').toLowerCase()] || 'normal',
+            importance:
+                importanceMap[(event.importance || "normal").toLowerCase()] ||
+                "normal",
             isReminderOn: !!event.isReminderOn,
         };
     }
 
-    private async graphGetMessages(top: number, onlyUnread: boolean = false): Promise<IEmail[]> {
+    private async graphGetMessages(
+        top: number,
+        onlyUnread: boolean = false,
+    ): Promise<IEmail[]> {
         const query = new URLSearchParams({
-            '$top': String(top),
-            '$orderby': 'receivedDateTime desc',
-            '$select': 'id,subject,from,receivedDateTime,isRead,hasAttachments'
+            $top: String(top),
+            $orderby: "receivedDateTime desc",
+            $select: "id,subject,from,receivedDateTime,isRead,hasAttachments",
         });
         if (onlyUnread) {
-            query.append('$filter', 'isRead eq false');
+            query.append("$filter", "isRead eq false");
         }
-        const response = await axios.get(`${ExchangeClient.GRAPH_BASE_URL}/me/messages?${query.toString()}`, {
-            headers: this.getGraphHeaders()
-        });
-        return (response.data.value || []).map((message: any) => this.parseEmailFromGraph(message, false));
+        const response = await axios.get(
+            `${ExchangeClient.GRAPH_BASE_URL}/me/messages?${query.toString()}`,
+            {
+                headers: this.getGraphHeaders(),
+            },
+        );
+        return (response.data.value || []).map((message: any) =>
+            this.parseEmailFromGraph(message, false),
+        );
     }
 
     private async graphGetMessageById(itemId: string): Promise<IEmail> {
         const query = new URLSearchParams({
-            '$select': 'id,subject,from,receivedDateTime,isRead,hasAttachments,body,categories'
+            $select:
+                "id,subject,from,receivedDateTime,isRead,hasAttachments,body,categories",
         });
-        const response = await axios.get(`${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}?${query.toString()}`, {
-            headers: this.getGraphHeaders()
-        });
+        const response = await axios.get(
+            `${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}?${query.toString()}`,
+            {
+                headers: this.getGraphHeaders(),
+            },
+        );
         return this.parseEmailFromGraph(response.data, true);
     }
 
-    private async graphGetEvents(startDate: string, endDate: string): Promise<IEvent[]> {
+    private async graphGetEvents(
+        startDate: string,
+        endDate: string,
+    ): Promise<IEvent[]> {
         const query = new URLSearchParams({
             startDateTime: new Date(startDate).toISOString(),
             endDateTime: new Date(endDate).toISOString(),
-            '$top': '100',
-            '$select': 'id,subject,start,end,location,body,attendees,importance,isReminderOn',
-            '$orderby': 'start/dateTime'
+            $top: "100",
+            $select:
+                "id,subject,start,end,location,body,attendees,importance,isReminderOn",
+            $orderby: "start/dateTime",
         });
-        const response = await axios.get(`${ExchangeClient.GRAPH_BASE_URL}/me/calendarView?${query.toString()}`, {
-            headers: this.getGraphHeaders()
-        });
-        return (response.data.value || []).map((item: any) => this.parseEventFromGraph(item));
+        const response = await axios.get(
+            `${ExchangeClient.GRAPH_BASE_URL}/me/calendarView?${query.toString()}`,
+            {
+                headers: this.getGraphHeaders(),
+            },
+        );
+        return (response.data.value || []).map((item: any) =>
+            this.parseEventFromGraph(item),
+        );
     }
 
     private startTokenRefresh() {
-        if (!this.config.refreshToken || !this.config.tokenUrl || !this.config.clientId || !this.config.clientSecret) {
-            logger.warn('Token Refresh params missing, skipping auto-refresh setup.');
+        if (
+            !this.config.refreshToken ||
+            !this.config.tokenUrl ||
+            !this.config.clientId ||
+            !this.config.clientSecret
+        ) {
+            logger.warn(
+                "Token Refresh params missing, skipping auto-refresh setup.",
+            );
             return;
         }
 
         // Set interval to refresh token (e.g., every 50 minutes)
         // Ideally should base on expires_in but 50min is safe for 1h tokens
-        const REFRESH_INTERVAL = 50 * 60 * 1000; 
-        
+        const REFRESH_INTERVAL = 50 * 60 * 1000;
+
         this.tokenRefreshTimer = setInterval(async () => {
             try {
-                logger.info(`Refreshing Exchange OAuth token for user ${this.user ? this.user.id : 'unknown'}...`);
-                const response = await axios.post(this.config.tokenUrl!, new URLSearchParams({
-                    client_id: this.config.clientId!,
-                    client_secret: this.config.clientSecret!,
-                    grant_type: 'refresh_token',
-                    refresh_token: this.config.refreshToken!,
-                }).toString(), {
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                });
+                logger.info(
+                    `Refreshing Exchange OAuth token for user ${this.user ? this.user.id : "unknown"}...`,
+                );
+                const response = await axios.post(
+                    this.config.tokenUrl!,
+                    new URLSearchParams({
+                        client_id: this.config.clientId!,
+                        client_secret: this.config.clientSecret!,
+                        grant_type: "refresh_token",
+                        refresh_token: this.config.refreshToken!,
+                    }).toString(),
+                    {
+                        headers: {
+                            "Content-Type": "application/x-www-form-urlencoded",
+                        },
+                    },
+                );
 
-                const { access_token, refresh_token, expires_in } = response.data;
-                const expiresAt = Date.now() + ((expires_in || 3600) * 1000);
+                const { access_token, refresh_token, expires_in } =
+                    response.data;
+                const expiresAt = Date.now() + (expires_in || 3600) * 1000;
 
                 // Update local config
                 this.config.oauthToken = access_token;
                 if (refresh_token) this.config.refreshToken = refresh_token;
 
                 // Update credential target based on auth mode
-                if (this.authMode === 'ews') {
-                    this.service.Credentials = new OAuthCredentials(access_token);
+                if (this.authMode === "ews") {
+                    this.service.Credentials = new OAuthCredentials(
+                        access_token,
+                    );
                 }
-                
+
                 // Update User in DB
                 // Fetch fresh user first just in case
                 // Actually we can just update the fields we know
                 if (this.user) {
                     this.user.ExchangeAccessToken = access_token;
-                    if (refresh_token) this.user.ExchangeRefreshToken = refresh_token;
+                    if (refresh_token)
+                        this.user.ExchangeRefreshToken = refresh_token;
                     this.user.ExchangeTokenExpiresAt = expiresAt;
 
                     await dbService.updateUser(this.user);
@@ -224,86 +288,111 @@ export class ExchangeClient {
                 // Also update cache in index.ts if possible, but dbService usually handles persistence.
                 // Since user object is passed by reference from index.ts in many cases (userCache), modification here might be enough for memory updates.
 
-                logger.success(`Exchange OAuth token refreshed successfully for user ${this.user ? this.user.id : 'unknown'}`);
-
+                logger.success(
+                    `Exchange OAuth token refreshed successfully for user ${this.user ? this.user.id : "unknown"}`,
+                );
             } catch (err: any) {
-                logger.error(`Failed to refresh Exchange token: ${err.message}`);
+                logger.error(
+                    `Failed to refresh Exchange token: ${err.message}`,
+                );
                 // Don't stop timer, retry next time
             }
         }, REFRESH_INTERVAL);
     }
-    
+
     constructor(config: ExchangeConfig, user: User) {
         this.config = config;
         this.user = user;
-        this.authMode = this.shouldUseGraphAuth(config) ? 'graph' : 'ews';
-        logger.exchange('Using ews-javascript-api initializing Exchange Client...');
+        this.authMode = this.shouldUseGraphAuth(config) ? "graph" : "ews";
+        logger.exchange(
+            "Using ews-javascript-api initializing Exchange Client...",
+        );
 
         // 创建 ExchangeService 实例
         this.service = new ExchangeService(ExchangeVersion.Exchange2013_SP1);
 
         // 如果配置了 refresh token，设置自动刷新
-        if (this.config.refreshToken && this.config.clientId && this.config.clientSecret) {
-             this.startTokenRefresh();
+        if (
+            this.config.refreshToken &&
+            this.config.clientId &&
+            this.config.clientSecret
+        ) {
+            this.startTokenRefresh();
         }
 
         // 初始化 LLM API 客户端
         if (config.openaiApiKey) {
-            this.llmApi = new LLMApi(config.openaiApiKey, config.openaiModel || 'gpt-4o') as LLMApi;
+            this.llmApi = new LLMApi(
+                config.openaiApiKey,
+                config.openaiModel || "gpt-4o",
+            ) as LLMApi;
         } else {
-            logger.warn('未提供 OpenAI API Key，无法使用邮件智能处理功能');
-
+            logger.warn("未提供 OpenAI API Key，无法使用邮件智能处理功能");
         }
 
         // 根据是否存在 domain 来决定用户名的格式
-        const username = this.config.domain 
-            ? `${this.config.domain}\\${this.config.username}` 
+        const username = this.config.domain
+            ? `${this.config.domain}\\${this.config.username}`
             : this.config.username;
-        
+
         if (this.config.oauthToken) {
-            if (this.authMode === 'ews') {
-                this.service.Credentials = new OAuthCredentials(this.config.oauthToken);
-                logger.exchange('Using OAuth authentication for Exchange (EWS mode).');
+            if (this.authMode === "ews") {
+                this.service.Credentials = new OAuthCredentials(
+                    this.config.oauthToken,
+                );
+                logger.exchange(
+                    "Using OAuth authentication for Exchange (EWS mode).",
+                );
             } else {
-                logger.exchange('Using OAuth authentication for Microsoft Graph delegated mode.');
+                logger.exchange(
+                    "Using OAuth authentication for Microsoft Graph delegated mode.",
+                );
             }
         } else {
-            this.service.Credentials = new WebCredentials(username, this.config.password);
+            this.service.Credentials = new WebCredentials(
+                username,
+                this.config.password,
+            );
             logger.data(`使用的用户名 (格式化后): ${username}`);
-            logger.data(`域名: ${this.config.domain || '未设置'}`);
+            logger.data(`域名: ${this.config.domain || "未设置"}`);
         }
-        
+
         // 启用跟踪以进行调试（仅 EWS 模式）
-        if (this.authMode === 'ews') {
+        if (this.authMode === "ews") {
             this.service.TraceEnabled = true;
             this.service.TraceFlags = TraceFlags.All;
             this.service.TraceListener = {
                 Trace: (traceType: string, traceMessage: string) => {
                     logger.data(`[EWS-TRACE] ${traceType}: ${traceMessage}`);
-                }
+                },
             };
         }
 
         logger.data(`使用的用户名 (格式化后): ${username}`);
-        logger.data(`域名: ${this.config.domain || '未设置'}`);
-        logger.exchange('客户端初始化完成。将在首次请求时使用 Autodiscover。');
+        logger.data(`域名: ${this.config.domain || "未设置"}`);
+        logger.exchange("客户端初始化完成。将在首次请求时使用 Autodiscover。");
 
         // 初始化后立即测试日历连接并启动推送通知
         (async () => {
             try {
-                logger.exchange('初始化时测试日历连接...');
+                logger.exchange("初始化时测试日历连接...");
                 const start = new Date();
                 const end = new Date();
                 end.setDate(start.getDate() + 1); // 获取到明天为止的事件
-                
-                const events = await this.getEvents(toShanghaiISO(start), toShanghaiISO(end));
-                logger.success(`日历连接测试成功，获取到未来24小时内的 ${events.length} 个事件。`);
-                
+
+                const events = await this.getEvents(
+                    toShanghaiISO(start),
+                    toShanghaiISO(end),
+                );
+                logger.success(
+                    `日历连接测试成功，获取到未来24小时内的 ${events.length} 个事件。`,
+                );
+
                 // 启动推送通知订阅
                 await this.startPushNotifications();
             } catch (error) {
                 // 错误已在 getEvents 中记录，这里只记录测试失败的上下文
-                logger.error('初始化日历连接测试失败。');
+                logger.error("初始化日历连接测试失败。");
             }
         })();
     }
@@ -312,151 +401,214 @@ export class ExchangeClient {
      * 确保已执行 Autodiscover 并设置了 EWS URL
      */
     private async ensureAutodiscover(): Promise<void> {
-        if (this.authMode === 'graph') {
+        if (this.authMode === "graph") {
             return;
         }
         if (!this.service.Url) {
-            logger.exchange('执行 Autodiscover 或修正配置的 URL 以查找 EWS 端点...');
+            logger.exchange(
+                "执行 Autodiscover 或修正配置的 URL 以查找 EWS 端点...",
+            );
             try {
                 // 如果提供了 exchangeUrl，则直接使用，否则执行 Autodiscover
                 if (this.config.exchangeUrl) {
                     let ewsUrl = this.config.exchangeUrl;
                     // 确保 URL 指向 EWS 端点
-                    if (!ewsUrl.toLowerCase().endsWith('/ews/exchange.asmx')) {
-                        if (!ewsUrl.endsWith('/')) {
-                            ewsUrl += '/';
+                    if (!ewsUrl.toLowerCase().endsWith("/ews/exchange.asmx")) {
+                        if (!ewsUrl.endsWith("/")) {
+                            ewsUrl += "/";
                         }
-                        ewsUrl += 'EWS/Exchange.asmx';
+                        ewsUrl += "EWS/Exchange.asmx";
                     }
                     this.service.Url = new Uri(ewsUrl);
-                    logger.success(`已使用修正后的 EWS URL: ${this.service.Url.AbsoluteUri}`);
+                    logger.success(
+                        `已使用修正后的 EWS URL: ${this.service.Url.AbsoluteUri}`,
+                    );
                 } else {
-                    await this.service.AutodiscoverUrl(this.config.username, (url) => this.redirectionUrlValidationCallback(url));
-                    logger.success(`Autodiscover 成功。EWS URL 设置为: ${(this.service.Url && (this.service.Url as Uri).AbsoluteUri) || '未知'}`);
+                    await this.service.AutodiscoverUrl(
+                        this.config.username,
+                        (url) => this.redirectionUrlValidationCallback(url),
+                    );
+                    logger.success(
+                        `Autodiscover 成功。EWS URL 设置为: ${(this.service.Url && (this.service.Url as Uri).AbsoluteUri) || "未知"}`,
+                    );
                 }
             } catch (err) {
-                logger.error('Autodiscover 或 URL 设置失败: ' + (err instanceof Error ? err.message : err));
+                logger.error(
+                    "Autodiscover 或 URL 设置失败: " +
+                        (err instanceof Error ? err.message : err),
+                );
                 throw err;
             }
         }
     }
-    
+
     // 启动推送通知
     public async startPushNotifications() {
-        if (this.authMode === 'graph') {
-            logger.warn('Graph mode does not support current EWS streaming push; skipping push subscription.');
+        if (this.authMode === "graph") {
+            logger.warn(
+                "Graph mode does not support current EWS streaming push; skipping push subscription.",
+            );
             return;
         }
         try {
             await this.ensureAutodiscover();
-            
-            logger.exchange('启动Exchange推送通知服务...');
-            
+
+            logger.exchange("启动Exchange推送通知服务...");
+
             // 停止现有连接
             if (this.streamingConnection) {
                 await this.stopPushNotifications();
             }
-            
+
             try {
                 // 创建流订阅，监听收件箱的新邮件事件和日历的新事件
                 const inboxFolderId = new FolderId(WellKnownFolderName.Inbox);
-                const calendarFolderId = new FolderId(WellKnownFolderName.Calendar);
-                this.streamingSubscription = await this.service.SubscribeToStreamingNotifications(
-                    [inboxFolderId, calendarFolderId],
-                    EventType.NewMail, EventType.Created, EventType.Modified
+                const calendarFolderId = new FolderId(
+                    WellKnownFolderName.Calendar,
                 );
-                logger.exchange('成功创建推送通知订阅（邮件和日历）。');
+                this.streamingSubscription =
+                    await this.service.SubscribeToStreamingNotifications(
+                        [inboxFolderId, calendarFolderId],
+                        EventType.NewMail,
+                        EventType.Created,
+                        EventType.Modified,
+                    );
+                logger.exchange("成功创建推送通知订阅（邮件和日历）。");
             } catch (subscriptionError: any) {
-                logger.error('创建推送通知订阅失败:', subscriptionError.message || '未知错误');
+                logger.error(
+                    "创建推送通知订阅失败:",
+                    subscriptionError.message || "未知错误",
+                );
                 // 等待更长时间后重试订阅创建
-                setTimeout(() => this.startPushNotifications().catch(err => {}), 10000);
+                setTimeout(
+                    () => this.startPushNotifications().catch((err) => {}),
+                    10000,
+                );
                 return;
             }
-            
+
             // 创建流连接
-            this.streamingConnection = new StreamingSubscriptionConnection(this.service, 30); // 30分钟连接超时
-            
+            this.streamingConnection = new StreamingSubscriptionConnection(
+                this.service,
+                30,
+            ); // 30分钟连接超时
+
             // 添加订阅
-            this.streamingConnection.AddSubscription(this.streamingSubscription);
-            
+            this.streamingConnection.AddSubscription(
+                this.streamingSubscription,
+            );
+
             // 添加事件处理程序
-            this.streamingConnection.OnNotificationEvent.push(async (sender, args) => {
-                try {
-                    await this.handleNotificationEvent(args.Events);
-                } catch (eventError: any) {
-                    logger.error('处理通知事件时出错:', eventError.message || '未知错误');
-                }
-            });
-            
+            this.streamingConnection.OnNotificationEvent.push(
+                async (sender, args) => {
+                    try {
+                        await this.handleNotificationEvent(args.Events);
+                    } catch (eventError: any) {
+                        logger.error(
+                            "处理通知事件时出错:",
+                            eventError.message || "未知错误",
+                        );
+                    }
+                },
+            );
+
             this.streamingConnection.OnDisconnect.push((sender, args) => {
-                logger.exchange('推送通知连接已断开。正在尝试重新连接...');
+                logger.exchange("推送通知连接已断开。正在尝试重新连接...");
                 // 重新连接
-                setTimeout(() => this.startPushNotifications().catch(err => 
-                    logger.error('重新连接推送通知失败:', err.message || '未知错误')
-                ), 5000);
+                setTimeout(
+                    () =>
+                        this.startPushNotifications().catch((err) =>
+                            logger.error(
+                                "重新连接推送通知失败:",
+                                err.message || "未知错误",
+                            ),
+                        ),
+                    5000,
+                );
             });
-            
-            this.streamingConnection.OnSubscriptionError.push((sender, args) => {
-                logger.error('推送通知订阅错误:', args.Exception?.Message || '未知错误');
-                // 订阅错误时也尝试重新连接
-                setTimeout(() => this.startPushNotifications().catch(err => {}), 5000);
-            });
-            
+
+            this.streamingConnection.OnSubscriptionError.push(
+                (sender, args) => {
+                    logger.error(
+                        "推送通知订阅错误:",
+                        args.Exception?.Message || "未知错误",
+                    );
+                    // 订阅错误时也尝试重新连接
+                    setTimeout(
+                        () => this.startPushNotifications().catch((err) => {}),
+                        5000,
+                    );
+                },
+            );
+
             // 连接并开始监听
             await this.streamingConnection.Open();
-            logger.success('Exchange推送通知服务已启动并开始监听新邮件。');
-            
+            logger.success("Exchange推送通知服务已启动并开始监听新邮件。");
+
             // 启动健康检查
             this.startHealthCheck();
         } catch (error: any) {
-            logger.error('启动Exchange推送通知服务失败:', error.message || '未知错误');
+            logger.error(
+                "启动Exchange推送通知服务失败:",
+                error.message || "未知错误",
+            );
             // 5秒后重试
-            setTimeout(() => this.startPushNotifications().catch(err => {}), 5000);
+            setTimeout(
+                () => this.startPushNotifications().catch((err) => {}),
+                5000,
+            );
         }
     }
-    
+
     // 停止推送通知
     public async stopPushNotifications() {
         try {
             // 停止健康检查
             this.stopHealthCheck();
-            
+
             if (this.streamingConnection) {
                 await this.streamingConnection.Close();
                 this.streamingConnection = null;
             }
-            
+
             this.streamingSubscription = null;
-            logger.exchange('推送通知服务已停止。');
+            logger.exchange("推送通知服务已停止。");
         } catch (error: any) {
-            logger.error('停止推送通知服务时出错:', error.message || '未知错误');
+            logger.error(
+                "停止推送通知服务时出错:",
+                error.message || "未知错误",
+            );
         }
     }
-    
+
     // 停止健康检查
     private stopHealthCheck() {
         if (this.healthCheckTimer) {
             clearInterval(this.healthCheckTimer);
             this.healthCheckTimer = null;
-            logger.exchange('推送通知健康检查已停止。');
+            logger.exchange("推送通知健康检查已停止。");
         }
     }
-    
+
     // 清理资源（用于应用关闭时）
     public async dispose() {
-        logger.exchange('开始清理Exchange客户端资源...');
+        logger.exchange("开始清理Exchange客户端资源...");
         await this.stopPushNotifications();
-        logger.success('Exchange客户端资源清理完成。');
+        logger.success("Exchange客户端资源清理完成。");
     }
-    
+
     // 处理推送通知事件
-    private async handleNotificationEvent(events: {EventType: EventType, ItemId?: {UniqueId: string}}[]) {
+    private async handleNotificationEvent(
+        events: { EventType: EventType; ItemId?: { UniqueId: string } }[],
+    ) {
         logger.exchange(`收到 ${events.length} 个通知事件。`);
-        
+
         // 这里可以根据事件类型进行处理
         for (const event of events) {
-            if (event.EventType === EventType.NewMail || event.EventType === EventType.Created) {
-                
+            if (
+                event.EventType === EventType.NewMail ||
+                event.EventType === EventType.Created
+            ) {
                 // 对于每个通知，获取相关的项目ID
                 if (event.ItemId) {
                     const uniqueId = event.ItemId.UniqueId;
@@ -469,24 +621,41 @@ export class ExchangeClient {
 
                     // 添加到已处理集合，并设置过期清理
                     this.processedMessageIds.add(uniqueId);
-                    setTimeout(() => this.processedMessageIds.delete(uniqueId), 5 * 60 * 1000); // 5分钟后过期
+                    setTimeout(
+                        () => this.processedMessageIds.delete(uniqueId),
+                        5 * 60 * 1000,
+                    ); // 5分钟后过期
 
-                    logger.exchange('收到新邮件通知，正在处理...');
-                    logger.exchange(`正在处理项目ID: ${JSON.stringify(event.ItemId)}`);
+                    logger.exchange("收到新邮件通知，正在处理...");
+                    logger.exchange(
+                        `正在处理项目ID: ${JSON.stringify(event.ItemId)}`,
+                    );
                     try {
                         // 创建ItemId对象
                         const itemId = new ItemId(uniqueId);
-                        
+
                         // 首先尝试作为邮件处理
-                        const propSet = new PropertySet(BasePropertySet.FirstClassProperties, [ItemSchema.Body]);
-                        const email = await EmailMessage.Bind(this.service, itemId, propSet);
-                        
+                        const propSet = new PropertySet(
+                            BasePropertySet.FirstClassProperties,
+                            [ItemSchema.Body],
+                        );
+                        const email = await EmailMessage.Bind(
+                            this.service,
+                            itemId,
+                            propSet,
+                        );
+
                         // 将邮件转换为应用程序格式（包含正文）
-                        const emailData: IEmail = this.parseEmailFromEWS(email, true);
-                        
+                        const emailData: IEmail = this.parseEmailFromEWS(
+                            email,
+                            true,
+                        );
+
                         // 调试日志：只记录邮件主题信息
-                        logger.exchange(`邮件详情 - ID: ${emailData.id}, 主题: ${emailData.subject}`);
-                        
+                        logger.exchange(
+                            `邮件详情 - ID: ${emailData.id}, 主题: ${emailData.subject}`,
+                        );
+
                         // 触发自动处理逻辑
                         await this.autoProcessNewEmail(emailData);
                     } catch (error: any) {
@@ -494,118 +663,149 @@ export class ExchangeClient {
                         try {
                             await this.handleCalendarEvent(uniqueId);
                         } catch (calendarError: any) {
-                            logger.error(`处理项目时出错（邮件/日历）: ${error.message || '未知错误'}`);
+                            logger.error(
+                                `处理项目时出错（邮件/日历）: ${error.message || "未知错误"}`,
+                            );
                         }
                     }
                 }
             }
         }
     }
-    
+
     // 处理日历事件
     private async handleCalendarEvent(itemId: string): Promise<void> {
         try {
             logger.exchange(`收到新日历事件通知，正在处理项目ID: ${itemId}`);
-            
+
             // 创建ItemId对象
             const appointmentId = new ItemId(itemId);
-            
+
             // 加载日历事件
-            const propSet = new PropertySet(BasePropertySet.FirstClassProperties, [
-                AppointmentSchema.Subject,
-                AppointmentSchema.Start,
-                AppointmentSchema.End,
-                AppointmentSchema.Location,
-                AppointmentSchema.Body,
-                AppointmentSchema.RequiredAttendees,
-                AppointmentSchema.Importance,
-                AppointmentSchema.IsReminderSet
-            ]);
-            
-            const appointment = await Appointment.Bind(this.service, appointmentId, propSet);
-            
-            let importance: 'high' | 'normal' | 'low' = 'normal';
-            if (appointment.Importance === Importance.High) importance = 'high';
-            else if (appointment.Importance === Importance.Low) importance = 'low';
+            const propSet = new PropertySet(
+                BasePropertySet.FirstClassProperties,
+                [
+                    AppointmentSchema.Subject,
+                    AppointmentSchema.Start,
+                    AppointmentSchema.End,
+                    AppointmentSchema.Location,
+                    AppointmentSchema.Body,
+                    AppointmentSchema.RequiredAttendees,
+                    AppointmentSchema.Importance,
+                    AppointmentSchema.IsReminderSet,
+                ],
+            );
+
+            const appointment = await Appointment.Bind(
+                this.service,
+                appointmentId,
+                propSet,
+            );
+
+            let importance: "high" | "normal" | "low" = "normal";
+            if (appointment.Importance === Importance.High) importance = "high";
+            else if (appointment.Importance === Importance.Low)
+                importance = "low";
 
             // 将日历事件转换为任务格式
             const taskData: Task = {
                 id: uuidv4(),
                 name: appointment.Subject,
-                description: appointment.Body?.Text || '来自Exchange日历的事件',
-                dueDate: toShanghaiISO(appointment.End.ToUniversalTime().ToISOString()),
-                startTime: toShanghaiISO(appointment.Start.ToUniversalTime().ToISOString()),
-                endTime: toShanghaiISO(appointment.End.ToUniversalTime().ToISOString()),
-                location: appointment.Location || '',
+                description: appointment.Body?.Text || "来自Exchange日历的事件",
+                dueDate: toShanghaiISO(
+                    appointment.End.ToUniversalTime().ToISOString(),
+                ),
+                startTime: toShanghaiISO(
+                    appointment.Start.ToUniversalTime().ToISOString(),
+                ),
+                endTime: toShanghaiISO(
+                    appointment.End.ToUniversalTime().ToISOString(),
+                ),
+                location: appointment.Location || "",
                 completed: false,
                 pushedToMSTodo: false,
-                scheduleType: 'single',
+                scheduleType: "single",
                 importance: importance,
-                isReminderOn: appointment.IsReminderSet
+                isReminderOn: appointment.IsReminderSet,
             };
-            
-            logger.exchange(`日历事件详情 - 主题: ${taskData.name}, 开始时间: ${taskData.startTime}, 结束时间: ${taskData.endTime}`);
-            
+
+            logger.exchange(
+                `日历事件详情 - 主题: ${taskData.name}, 开始时间: ${taskData.startTime}, 结束时间: ${taskData.endTime}`,
+            );
+
             // 检查用户是否有MS token
             if (!this.user?.MStoken) {
-                logger.warn('用户未绑定MS账户，无法将日历事件推送到MS Todo');
+                logger.warn("用户未绑定MS账户，无法将日历事件推送到MS Todo");
                 return;
             }
-            
+
             // 使用createTodoItem将日历事件添加到MS Todo
             try {
                 await createTodoItem(taskData, this.user.MStoken);
-                logger.success(`已成功将日历事件添加到MS Todo: ${taskData.name}`);
+                logger.success(
+                    `已成功将日历事件添加到MS Todo: ${taskData.name}`,
+                );
             } catch (err: any) {
                 // 如果是 401，则暂停该用户的 MS Graph 操作，直到前端刷新 token
                 if (err.response?.status === 401) {
                     if (this.user) {
-                        this.user.MStoken = '';
+                        this.user.MStoken = "";
                         this.user.MSbinded = false;
-                        try { await (await import('./dbService')).dbService.updateUser(this.user); } catch {}
-                        logger.error(`MS Graph 401 detected; cleared MStoken and set MSbinded=false for user ${this.user.id}`);
+                        try {
+                            await (
+                                await import("./dbService")
+                            ).dbService.updateUser(this.user);
+                        } catch {}
+                        logger.error(
+                            `MS Graph 401 detected; cleared MStoken and set MSbinded=false for user ${this.user.id}`,
+                        );
                     }
                 }
                 throw err;
             }
-            
         } catch (error: any) {
-            logger.error(`处理日历事件时出错: ${error.message || '未知错误'}`);
+            logger.error(`处理日历事件时出错: ${error.message || "未知错误"}`);
         }
     }
-    
+
     // 自动处理新邮件
- public async autoProcessNewEmail(email: IEmail) {
+    public async autoProcessNewEmail(email: IEmail) {
         try {
             logger.exchange(`开始自动处理邮件: ${email.subject}`);
-            
+
             // 调试日志：只检查邮件正文是否存在，不输出内容
             if (!email.body) {
                 logger.warn(`邮件正文为空: ${email.subject}`);
             }
-           
+
             // 接入OpenAI API
             const apiResponse = await this.callLLMAPI(email);
-            
+
             // 触发后续处理逻辑
             await this.handleProcessedData(apiResponse, email);
-            
-            logger.success(`成功自动处理邮件: ${email.subject}`);   
+
+            logger.success(`成功自动处理邮件: ${email.subject}`);
         } catch (error: any) {
-            logger.error(`自动处理邮件时出错: ${error.message || '未知错误'}`);
+            logger.error(`自动处理邮件时出错: ${error.message || "未知错误"}`);
             // 错误处理和重试机制
             this.handleProcessingError(error, email);
         }
     }
-    
+
     // 处理处理邮件时的错误，实现重试机制
-    private handleProcessingError(error: any, email: IEmail, retryCount: number = 0) {
+    private handleProcessingError(
+        error: any,
+        email: IEmail,
+        retryCount: number = 0,
+    ) {
         const maxRetries = 3;
-        
+
         if (retryCount < maxRetries) {
             const retryDelay = Math.pow(2, retryCount) * 5000; // 指数退避策略
-            logger.exchange(`将在 ${retryDelay/1000} 秒后重试处理邮件: ${email.subject} (重试 ${retryCount + 1}/${maxRetries})`);
-            
+            logger.exchange(
+                `将在 ${retryDelay / 1000} 秒后重试处理邮件: ${email.subject} (重试 ${retryCount + 1}/${maxRetries})`,
+            );
+
             setTimeout(() => {
                 this.autoProcessNewEmail(email).catch(() => {
                     this.handleProcessingError(error, email, retryCount + 1);
@@ -617,7 +817,7 @@ export class ExchangeClient {
             this.logFailedEmail(email, error);
         }
     }
-    
+
     // 记录处理失败的邮件
     private logFailedEmail(email: IEmail, error: any) {
         try {
@@ -628,30 +828,35 @@ export class ExchangeClient {
                 from: email.from,
                 receivedAt: email.receivedAt,
                 error: error.message || JSON.stringify(error),
-                errorStack: error.stack
+                errorStack: error.stack,
             };
-            
-            logger.error('记录失败邮件:', JSON.stringify(failureLog, null, 2));
-            
+
+            logger.error("记录失败邮件:", JSON.stringify(failureLog, null, 2));
+
             // 这里可以扩展为将失败记录存储到数据库或文件系统
         } catch (logError) {
-            logger.error('记录失败邮件时出错:', logError);
+            logger.error("记录失败邮件时出错:", logError);
         }
     }
-    
+
     // 接入OpenAI API
     private async callLLMAPI(email: IEmail): Promise<any> {
         if (!this.llmApi) {
-            throw new Error('LLM API 客户端未初始化');
+            throw new Error("LLM API 客户端未初始化");
         }
-        
+
         return this.llmApi.processEmail(email);
     }
-    
 
     // 触发后续处理逻辑
-    private async handleProcessedData(processedData: any, email: IEmail): Promise<void> {
-        if (!processedData.tool_calls || processedData.tool_calls.length === 0) {
+    private async handleProcessedData(
+        processedData: any,
+        email: IEmail,
+    ): Promise<void> {
+        if (
+            !processedData.tool_calls ||
+            processedData.tool_calls.length === 0
+        ) {
             logger.exchange(`未触发任何工具调用`);
             return;
         }
@@ -659,12 +864,14 @@ export class ExchangeClient {
         for (const toolCall of processedData.tool_calls) {
             const functionName = (toolCall as any).function.name;
             const args = JSON.parse((toolCall as any).function.arguments);
-            
-            logger.exchange(`处理工具调用: ${functionName}, 参数: ${JSON.stringify(args)}`);
 
-            if (functionName === 'add_schedule') {
+            logger.exchange(
+                `处理工具调用: ${functionName}, 参数: ${JSON.stringify(args)}`,
+            );
+
+            if (functionName === "add_schedule") {
                 await this.handleAddScheduleTool(args, email);
-            } else if (functionName === 'log_info') {
+            } else if (functionName === "log_info") {
                 await this.handleLogInfoTool(args, email);
             } else {
                 logger.warn(`未知的工具调用: ${functionName}`);
@@ -676,9 +883,9 @@ export class ExchangeClient {
             await this.markSystem.addAIReadTagToEmail(email.id);
             logger.success(`已将邮件标记为AI已读: ${email.subject}`);
         } catch (err: any) {
-            logger.error(`标记邮件为AI已读失败: ${err.message || '未知错误'}`);
+            logger.error(`标记邮件为AI已读失败: ${err.message || "未知错误"}`);
         }
-        
+
         // 分析邮件重要性
         // if (this.llmApi) {
         //     const importance = await this.llmApi.analyzeEmailImportance(email);
@@ -686,9 +893,12 @@ export class ExchangeClient {
         // }
     }
 
-    private async handleAddScheduleTool(args: any, email: IEmail): Promise<void> {
+    private async handleAddScheduleTool(
+        args: any,
+        email: IEmail,
+    ): Promise<void> {
         if (!this.user) {
-            logger.error('无法创建任务：用户未初始化');
+            logger.error("无法创建任务：用户未初始化");
             return;
         }
 
@@ -697,26 +907,31 @@ export class ExchangeClient {
 
         // 如果没有提供任务名称，使用邮件主题作为默认名称
         if (!safeArgs.name) {
-            logger.warn(`LLM 未提供任务名称，使用邮件主题作为默认名称: ${email.subject}`);
-            safeArgs.name = email.subject || '未命名任务';
+            logger.warn(
+                `LLM 未提供任务名称，使用邮件主题作为默认名称: ${email.subject}`,
+            );
+            safeArgs.name = email.subject || "未命名任务";
         }
 
         // 清理邮件正文内容
-        const cleanedEmailBody = this.cleanHtmlContent(email.body || '');
+        const cleanedEmailBody = this.cleanHtmlContent(email.body || "");
         const description = `来自邮件: ${email.subject}`;
 
         const toolArgs = {
             ...safeArgs,
-            description
+            description,
         };
 
         // 自动化（LLM）处理邮件时，日程请求入队，不直接入库
         try {
-            const dbService = (await import('./dbService')).dbService;
+            const dbService = (await import("./dbService")).dbService;
 
             // 构造一个 JSON-safe 的精简 email 对象，避免将可能包含循环引用的复杂对象序列化入库
-            const attachmentsCount = (email.attachments && (email.attachments as any).Count) ??
-                (Array.isArray((email as any).attachments) ? (email as any).attachments.length : 0);
+            const attachmentsCount =
+                (email.attachments && (email.attachments as any).Count) ??
+                (Array.isArray((email as any).attachments)
+                    ? (email as any).attachments.length
+                    : 0);
 
             const safeEmail = {
                 id: email.id,
@@ -724,81 +939,92 @@ export class ExchangeClient {
                 from: email.from,
                 receivedAt: email.receivedAt,
                 isRead: email.isRead,
-                body: this.cleanHtmlContent(email.body || ''),
+                body: this.cleanHtmlContent(email.body || ""),
                 hasAttachments: !!email.hasAttachments,
-                attachmentsCount: attachmentsCount
+                attachmentsCount: attachmentsCount,
             };
 
-            const payload = { args: toolArgs, email: safeEmail, _meta: { source: 'exchange', createdAt: toShanghaiISO() } };
+            const payload = {
+                args: toolArgs,
+                email: safeEmail,
+                _meta: { source: "exchange", createdAt: toShanghaiISO() },
+            };
 
             const rawRequest = JSON.stringify(payload);
             await dbService.addScheduleToQueue(this.user.id, rawRequest);
-            logger.success(`已将日程请求加入队列，待用户确认: ${toolArgs.name}`);
-        } catch (err : any) {
-            logger.error(`日程队列入库失败: ${err.message || '未知错误'}`);
+            logger.success(
+                `已将日程请求加入队列，待用户确认: ${toolArgs.name}`,
+            );
+        } catch (err: any) {
+            logger.error(`日程队列入库失败: ${err.message || "未知错误"}`);
         }
     }
 
     private async handleLogInfoTool(args: any, email: IEmail): Promise<void> {
-        logger.exchange(`信息通知已记录: ${args.summary} (重要性: ${args.importance})`);
+        logger.exchange(
+            `信息通知已记录: ${args.summary} (重要性: ${args.importance})`,
+        );
     }
 
-
-    
-
     // 健康检查定时
-    
+
     // 启动健康检查
     private startHealthCheck() {
         // 清除现有的健康检查
         if (this.healthCheckTimer) {
             clearInterval(this.healthCheckTimer);
         }
-        
+
         // 每30分钟执行一次健康检查
-        this.healthCheckTimer = setInterval(() => {
-            this.performHealthCheck().catch(err => {
-                logger.error('健康检查失败:', err.message || '未知错误');
-                // 健康检查失败时尝试重启连接
-                this.restartConnection();
-            });
-        }, 30 * 60 * 1000);
-        
-        logger.exchange('推送通知健康检查已启动。');
+        this.healthCheckTimer = setInterval(
+            () => {
+                this.performHealthCheck().catch((err) => {
+                    logger.error("健康检查失败:", err.message || "未知错误");
+                    // 健康检查失败时尝试重启连接
+                    this.restartConnection();
+                });
+            },
+            30 * 60 * 1000,
+        );
+
+        logger.exchange("推送通知健康检查已启动。");
     }
-    
+
     // 执行健康检查
     private async performHealthCheck() {
         try {
-            logger.exchange('执行推送通知健康检查...');
-            
+            logger.exchange("执行推送通知健康检查...");
+
             // 检查连接状态
             if (this.streamingConnection && this.streamingConnection.IsOpen) {
-                logger.exchange('推送通知连接状态正常。');
+                logger.exchange("推送通知连接状态正常。");
                 return true;
             } else {
-                throw new Error('推送通知连接已关闭');
+                throw new Error("推送通知连接已关闭");
             }
         } catch (error) {
-            logger.error('健康检查检测到异常:', error || '未知错误');
+            logger.error("健康检查检测到异常:", error || "未知错误");
             throw error;
         }
     }
-    
+
     // 重启推送通知连接
     private async restartConnection() {
-        logger.exchange('正在重启推送通知连接...');
+        logger.exchange("正在重启推送通知连接...");
         try {
             // 停止当前连接
             await this.stopPushNotifications();
             // 短暂延迟后重新启动
             setTimeout(() => {
-                this.startPushNotifications().catch(err => {
-                    logger.error('重启推送通知连接失败:', err.message || '未知错误');
+                this.startPushNotifications().catch((err) => {
+                    logger.error(
+                        "重启推送通知连接失败:",
+                        err.message || "未知错误",
+                    );
                 });
             }, 2000);
         } catch (error) {
-            logger.error('重启连接过程中出错:', error|| '未知错误');
+            logger.error("重启连接过程中出错:", error || "未知错误");
         }
     }
 
@@ -806,10 +1032,15 @@ export class ExchangeClient {
      * Autodiscover 重定向验证回调
      */
     private redirectionUrlValidationCallback(redirectionUrl: string): boolean {
-        logger.data(`[EWS-REDIRECT] Autodiscover 尝试重定向到: ${redirectionUrl}`);
+        logger.data(
+            `[EWS-REDIRECT] Autodiscover 尝试重定向到: ${redirectionUrl}`,
+        );
         // 简单的验证：允许所有 https 重定向。在生产环境中应更严格。
-        const isValid = new Uri(redirectionUrl).Scheme.toLowerCase() === 'https';
-        logger.data(`[EWS-REDIRECT] 重定向URL验证结果: ${isValid ? '有效' : '无效'}`);
+        const isValid =
+            new Uri(redirectionUrl).Scheme.toLowerCase() === "https";
+        logger.data(
+            `[EWS-REDIRECT] 重定向URL验证结果: ${isValid ? "有效" : "无效"}`,
+        );
         return isValid;
     }
 
@@ -819,7 +1050,7 @@ export class ExchangeClient {
      * @returns 邮件数组
      */
     async getUnreadEmails(top: number = 10): Promise<IEmail[]> {
-        if (this.authMode === 'graph') {
+        if (this.authMode === "graph") {
             logger.exchange(`Graph模式：开始获取 ${top} 封未读邮件...`);
             return this.graphGetMessages(top, true);
         }
@@ -827,51 +1058,75 @@ export class ExchangeClient {
         logger.exchange(`开始获取 ${top} 封未读邮件...`);
 
         // 创建过滤器，仅获取未读邮件
-        const searchFilter = new SearchFilter.IsEqualTo(EmailMessageSchema.IsRead, false);
-    
+        const searchFilter = new SearchFilter.IsEqualTo(
+            EmailMessageSchema.IsRead,
+            false,
+        );
+
         return this.findEmails(top, searchFilter);
     }
 
-    async findEmails(top: number = 10, searchFilter?: SearchFilter): Promise<IEmail[]> {
-        if (this.authMode === 'graph') {
+    async findEmails(
+        top: number = 10,
+        searchFilter?: SearchFilter,
+    ): Promise<IEmail[]> {
+        if (this.authMode === "graph") {
             if (searchFilter) {
-                logger.warn('Graph模式暂不支持 EWS SearchFilter，已忽略该筛选条件。');
+                logger.warn(
+                    "Graph模式暂不支持 EWS SearchFilter，已忽略该筛选条件。",
+                );
             }
             return this.graphGetMessages(top, false);
         }
         // 创建视图，限制结果数量
         const view = new ItemView(top);
         // 定义要加载的属性（不包含正文，因为Body不能在FindItem请求中使用）
-        view.PropertySet = new PropertySet(BasePropertySet.FirstClassProperties, [
-            ItemSchema.Subject,
-            ItemSchema.DateTimeReceived,
-            EmailMessageSchema.From,
-            EmailMessageSchema.IsRead
-        ]);
+        view.PropertySet = new PropertySet(
+            BasePropertySet.FirstClassProperties,
+            [
+                ItemSchema.Subject,
+                ItemSchema.DateTimeReceived,
+                EmailMessageSchema.From,
+                EmailMessageSchema.IsRead,
+            ],
+        );
         try {
-            const findResults = searchFilter 
-                ? await this.service.FindItems(WellKnownFolderName.Inbox, searchFilter, view)
+            const findResults = searchFilter
+                ? await this.service.FindItems(
+                      WellKnownFolderName.Inbox,
+                      searchFilter,
+                      view,
+                  )
                 : await this.service.FindItems(WellKnownFolderName.Inbox, view);
             logger.success(`成功获取到 ${findResults.TotalCount} 封邮件。`);
-            
+
             if (findResults.Items.length === 0) {
                 return [];
             }
 
             // 将 EWS item 转换为我们的 IEmail 格式（不包含正文，将在需要时单独获取）
-            const emails = findResults.Items.map(item => this.parseEmailFromEWS(item as EmailMessage, false));
-            
+            const emails = findResults.Items.map((item) =>
+                this.parseEmailFromEWS(item as EmailMessage, false),
+            );
+
             // 调试日志：只记录邮件主题信息
             emails.forEach((email, index) => {
-                logger.exchange(`邮件 ${index + 1}: ID=${email.id}, 主题="${email.subject}"`);
+                logger.exchange(
+                    `邮件 ${index + 1}: ID=${email.id}, 主题="${email.subject}"`,
+                );
             });
-            
+
             return emails;
         } catch (err) {
-            logger.error('获取邮件失败: ' + (err instanceof Error ? err.message : err));
+            logger.error(
+                "获取邮件失败: " + (err instanceof Error ? err.message : err),
+            );
             // 打印更详细的错误信息
-            if (err && typeof err === 'object') {
-                logger.data('详细错误: ' + JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
+            if (err && typeof err === "object") {
+                logger.data(
+                    "详细错误: " +
+                        JSON.stringify(err, Object.getOwnPropertyNames(err), 2),
+                );
             }
             throw err;
         }
@@ -883,16 +1138,22 @@ export class ExchangeClient {
      * @returns 邮件详情
      */
     async getEmailById(itemId: string): Promise<IEmail> {
-        if (this.authMode === 'graph') {
+        if (this.authMode === "graph") {
             logger.exchange(`Graph模式：正在获取 ID 为 ${itemId} 的邮件...`);
             return this.graphGetMessageById(itemId);
         }
         await this.ensureAutodiscover();
         logger.exchange(`正在获取 ID 为 ${itemId} 的邮件...`);
-        
-        const propSet = new PropertySet(BasePropertySet.FirstClassProperties, [ItemSchema.Body]);
-        const email = await EmailMessage.Bind(this.service, new ItemId(itemId), propSet);
-        
+
+        const propSet = new PropertySet(BasePropertySet.FirstClassProperties, [
+            ItemSchema.Body,
+        ]);
+        const email = await EmailMessage.Bind(
+            this.service,
+            new ItemId(itemId),
+            propSet,
+        );
+
         logger.success(`成功获取邮件: ${email.Subject}`);
         return this.parseEmailFromEWS(email, true);
     }
@@ -903,35 +1164,40 @@ export class ExchangeClient {
      * @returns 清理后的纯文本内容
      */
     private cleanHtmlContent(htmlContent: string): string {
-        if (!htmlContent) return '';
-        
+        if (!htmlContent) return "";
+
         try {
             // 移除HTML标签但保留文本内容
             let cleaned = htmlContent
                 // 移除script, style, head标签及其内容
-                .replace(/<script\b[\s\S]*?<\/script>/gi, '')
-                .replace(/<style\b[\s\S]*?<\/style>/gi, '')
-                .replace(/<head\b[\s\S]*?<\/head>/gi, '')
+                .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+                .replace(/<style\b[\s\S]*?<\/style>/gi, "")
+                .replace(/<head\b[\s\S]*?<\/head>/gi, "")
                 // 移除所有其他HTML标签
-                .replace(/<[^>]+>/g, ' ')
+                .replace(/<[^>]+>/g, " ")
                 // 替换常见HTML实体
-                .replace(/&nbsp;/g, ' ')
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .replace(/&amp;/g, '&')
+                .replace(/&nbsp;/g, " ")
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">")
+                .replace(/&amp;/g, "&")
                 .replace(/&quot;/g, '"')
                 .replace(/&#39;/g, "'")
                 .trim();
-            
+
             // 移除多余的空白字符
-            cleaned = cleaned.replace(/\s+/g, ' ');
-            
-            logger.exchange(`HTML内容清理完成，原始长度: ${htmlContent.length}, 清理后长度: ${cleaned.length}`);
+            cleaned = cleaned.replace(/\s+/g, " ");
+
+            logger.exchange(
+                `HTML内容清理完成，原始长度: ${htmlContent.length}, 清理后长度: ${cleaned.length}`,
+            );
             return cleaned;
         } catch (error) {
             logger.warn(`清理HTML内容时出错:`, error);
             // 如果清理失败，返回原始内容的简单版本
-            return htmlContent.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+            return htmlContent
+                .replace(/<[^>]*>/g, "")
+                .replace(/\s+/g, " ")
+                .trim();
         }
     }
 
@@ -941,28 +1207,36 @@ export class ExchangeClient {
      * @returns 创建的事件
      */
     async createEvent(eventData: IEvent): Promise<Appointment> {
-        if (this.authMode === 'graph') {
-            logger.exchange(`Graph模式：正在创建日历事件: ${eventData.subject}`);
+        if (this.authMode === "graph") {
+            logger.exchange(
+                `Graph模式：正在创建日历事件: ${eventData.subject}`,
+            );
             const payload: any = {
                 subject: eventData.subject,
                 body: {
-                    contentType: 'HTML',
-                    content: eventData.body || ''
+                    contentType: "HTML",
+                    content: eventData.body || "",
                 },
                 start: this.toGraphDateTime(eventData.start),
                 end: this.toGraphDateTime(eventData.end),
-                location: eventData.location ? { displayName: eventData.location } : undefined,
+                location: eventData.location
+                    ? { displayName: eventData.location }
+                    : undefined,
                 attendees: (eventData.attendees || []).map((attendee) => ({
                     emailAddress: { address: attendee },
-                    type: 'required'
+                    type: "required",
                 })),
-                importance: eventData.importance || 'normal',
-                isReminderOn: eventData.isReminderOn
+                importance: eventData.importance || "normal",
+                isReminderOn: eventData.isReminderOn,
             };
 
-            const response = await axios.post(`${ExchangeClient.GRAPH_BASE_URL}/me/events`, payload, {
-                headers: this.getGraphHeaders()
-            });
+            const response = await axios.post(
+                `${ExchangeClient.GRAPH_BASE_URL}/me/events`,
+                payload,
+                {
+                    headers: this.getGraphHeaders(),
+                },
+            );
 
             return response.data as Appointment;
         }
@@ -972,27 +1246,27 @@ export class ExchangeClient {
         try {
             const appointment = new Appointment(this.service);
             appointment.Subject = eventData.subject;
-            
+
             // 安全地设置正文内容，先清理HTML
             if (eventData.body) {
                 const cleanedBody = this.cleanHtmlContent(eventData.body);
                 appointment.Body = new MessageBody(cleanedBody);
                 logger.exchange(`事件正文已清理，长度: ${cleanedBody.length}`);
             } else {
-                appointment.Body = new MessageBody('');
+                appointment.Body = new MessageBody("");
             }
-            
+
             appointment.Start = new DateTime(eventData.start);
             appointment.End = new DateTime(eventData.end);
-            appointment.Location = eventData.location || '';
+            appointment.Location = eventData.location || "";
 
             // 设置重要性
             if (eventData.importance) {
                 switch (eventData.importance) {
-                    case 'high':
+                    case "high":
                         appointment.Importance = Importance.High;
                         break;
-                    case 'low':
+                    case "low":
                         appointment.Importance = Importance.Low;
                         break;
                     default:
@@ -1007,7 +1281,7 @@ export class ExchangeClient {
 
             // 安全地添加与会者
             if (eventData.attendees && eventData.attendees.length > 0) {
-                eventData.attendees.forEach(email => {
+                eventData.attendees.forEach((email) => {
                     try {
                         appointment.RequiredAttendees.Add(email);
                     } catch (attendeeError) {
@@ -1032,8 +1306,10 @@ export class ExchangeClient {
      * @returns 事件数组
      */
     async getEvents(startDate: string, endDate: string): Promise<IEvent[]> {
-        if (this.authMode === 'graph') {
-            logger.exchange(`Graph模式：正在获取从 ${startDate} 到 ${endDate} 的日历事件...`);
+        if (this.authMode === "graph") {
+            logger.exchange(
+                `Graph模式：正在获取从 ${startDate} 到 ${endDate} 的日历事件...`,
+            );
             return this.graphGetEvents(startDate, endDate);
         }
         await this.ensureAutodiscover();
@@ -1049,19 +1325,30 @@ export class ExchangeClient {
             AppointmentSchema.End,
             AppointmentSchema.Location,
             AppointmentSchema.Importance,
-            AppointmentSchema.IsReminderSet
+            AppointmentSchema.IsReminderSet,
         ]);
 
         try {
-            const findResults = await this.service.FindAppointments(WellKnownFolderName.Calendar, calendarView);
+            const findResults = await this.service.FindAppointments(
+                WellKnownFolderName.Calendar,
+                calendarView,
+            );
             logger.success(`成功获取到 ${findResults.TotalCount} 个日历事件。`);
-            
-            return findResults.Items.map(item => this.parseEventFromEWS(item));
+
+            return findResults.Items.map((item) =>
+                this.parseEventFromEWS(item),
+            );
         } catch (err) {
-            logger.error('获取日历事件失败: ' + (err instanceof Error ? err.message : err));
+            logger.error(
+                "获取日历事件失败: " +
+                    (err instanceof Error ? err.message : err),
+            );
             // 打印更详细的错误信息
-            if (err && typeof err === 'object') {
-                logger.data('详细错误: ' + JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
+            if (err && typeof err === "object") {
+                logger.data(
+                    "详细错误: " +
+                        JSON.stringify(err, Object.getOwnPropertyNames(err), 2),
+                );
             }
             throw err;
         }
@@ -1070,15 +1357,22 @@ export class ExchangeClient {
     /**
      * 将 EWS EmailMessage 对象解析为 IEmail 格式
      */
-    private parseEmailFromEWS(email: EmailMessage, includeBody: boolean = false): IEmail {
+    private parseEmailFromEWS(
+        email: EmailMessage,
+        includeBody: boolean = false,
+    ): IEmail {
         const from = email.From;
-        const bodyText = includeBody ? this.cleanHtmlContent(email.Body?.Text || '') : undefined;
+        const bodyText = includeBody
+            ? this.cleanHtmlContent(email.Body?.Text || "")
+            : undefined;
 
         return {
             id: email.Id.UniqueId,
             subject: email.Subject,
             from: from ? { name: from.Name, address: from.Address } : undefined,
-            receivedAt: toShanghaiISO(email.DateTimeReceived.MomentDate.toISOString()),
+            receivedAt: toShanghaiISO(
+                email.DateTimeReceived.MomentDate.toISOString(),
+            ),
             isRead: email.IsRead,
             body: bodyText,
             hasAttachments: email.HasAttachments,
@@ -1090,10 +1384,11 @@ export class ExchangeClient {
      * 将 EWS Appointment 对象解析为 IEvent 格式
      */
     private parseEventFromEWS(appointment: Appointment): IEvent {
-        let importance: 'high' | 'normal' | 'low' = 'normal';
+        let importance: "high" | "normal" | "low" = "normal";
         try {
-            if (appointment.Importance === Importance.High) importance = 'high';
-            else if (appointment.Importance === Importance.Low) importance = 'low';
+            if (appointment.Importance === Importance.High) importance = "high";
+            else if (appointment.Importance === Importance.Low)
+                importance = "low";
         } catch (e) {
             // Property might not be loaded
         }
@@ -1112,118 +1407,160 @@ export class ExchangeClient {
             end: toShanghaiISO(appointment.End.MomentDate.toISOString()),
             location: appointment.Location,
             importance: importance,
-            isReminderOn: isReminderOn
+            isReminderOn: isReminderOn,
         };
     }
 
-    /* 修改指定邮件为已读状态 
+    /* 修改指定邮件为已读状态
     @param itemId - 邮件 ID
     @param state - 是否标记为已读
     */
 
     public markSystem = {
-    markEmailAsRead : async (itemId: string, state: boolean): Promise<void> => {
-        if (this.authMode === 'graph') {
-            await axios.patch(`${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}`, { isRead: state }, {
-                headers: this.getGraphHeaders()
-            });
-            logger.success(`Graph模式：邮件 ID 为 ${itemId} 已更新已读状态。`);
-            return;
-        }
-        await this.ensureAutodiscover();
-        logger.exchange(`正在将邮件 ID 为 ${itemId} 标记为已读...`);
-        const email = await EmailMessage.Bind(this.service, new ItemId(itemId));
-        email.IsRead = state;
-        await email.Update(ConflictResolutionMode.AlwaysOverwrite);
-        logger.success(`邮件 ID 为 ${itemId} 已标记为已读。`);
-    },
+        markEmailAsRead: async (
+            itemId: string,
+            state: boolean,
+        ): Promise<void> => {
+            if (this.authMode === "graph") {
+                await axios.patch(
+                    `${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}`,
+                    { isRead: state },
+                    {
+                        headers: this.getGraphHeaders(),
+                    },
+                );
+                logger.success(
+                    `Graph模式：邮件 ID 为 ${itemId} 已更新已读状态。`,
+                );
+                return;
+            }
+            await this.ensureAutodiscover();
+            logger.exchange(`正在将邮件 ID 为 ${itemId} 标记为已读...`);
+            const email = await EmailMessage.Bind(
+                this.service,
+                new ItemId(itemId),
+            );
+            email.IsRead = state;
+            await email.Update(ConflictResolutionMode.AlwaysOverwrite);
+            logger.success(`邮件 ID 为 ${itemId} 已标记为已读。`);
+        },
 
-    /* 为指定邮件增加“AI已读”标签
+        /* 为指定邮件增加“AI已读”标签
     @param itemId - 邮件 ID
     */
-    addAIReadTagToEmail: async (itemId: string): Promise<void> => {
-        if (this.authMode === 'graph') {
-            const messageRes = await axios.get(`${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}?$select=categories`, {
-                headers: this.getGraphHeaders()
-            });
-            const categories: string[] = Array.isArray(messageRes.data?.categories) ? messageRes.data.categories : [];
-            const aiReadCategory = 'AI已读';
-            if (!categories.includes(aiReadCategory)) {
-                categories.push(aiReadCategory);
-                await axios.patch(`${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}`, { categories }, {
-                    headers: this.getGraphHeaders()
-                });
-                logger.success(`Graph模式：邮件 ID 为 ${itemId} 已增加“AI已读”标签。`);
-            } else {
-                logger.exchange(`Graph模式：邮件 ID 为 ${itemId} 已包含“AI已读”标签，无需重复添加。`);
-            }
-            return;
-        }
-        await this.ensureAutodiscover();
-        logger.exchange(`正在为邮件 ID 为 ${itemId} 增加“AI已读”标签...`);
-        const email = await EmailMessage.Bind(this.service, new ItemId(itemId));
-        const aiReadCategory = 'AI已读';
-        if (!email.Categories) {
-            // 使用 ews-javascript-api 的 StringList 而不是普通数组
-            email.Categories = new StringList();
-        }
-        // StringList 并不完全等同于原生数组，使用 any 以便复用 includes/push 语义
-        const categoriesAny = email.Categories as any;
-        if (!categoriesAny.includes || !categoriesAny.push) {
-            // 兼容没有 includes/push 的 StringList：检查 Items 属性或 Count
-            const items = categoriesAny.Items || [];
-            if (!items.includes(aiReadCategory)) {
-                items.push(aiReadCategory);
-                if (categoriesAny.Items) {
-                    categoriesAny.Items = items;
+        addAIReadTagToEmail: async (itemId: string): Promise<void> => {
+            if (this.authMode === "graph") {
+                const messageRes = await axios.get(
+                    `${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}?$select=categories`,
+                    {
+                        headers: this.getGraphHeaders(),
+                    },
+                );
+                const categories: string[] = Array.isArray(
+                    messageRes.data?.categories,
+                )
+                    ? messageRes.data.categories
+                    : [];
+                const aiReadCategory = "AI已读";
+                if (!categories.includes(aiReadCategory)) {
+                    categories.push(aiReadCategory);
+                    await axios.patch(
+                        `${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}`,
+                        { categories },
+                        {
+                            headers: this.getGraphHeaders(),
+                        },
+                    );
+                    logger.success(
+                        `Graph模式：邮件 ID 为 ${itemId} 已增加“AI已读”标签。`,
+                    );
+                } else {
+                    logger.exchange(
+                        `Graph模式：邮件 ID 为 ${itemId} 已包含“AI已读”标签，无需重复添加。`,
+                    );
                 }
-                await email.Update(ConflictResolutionMode.AlwaysOverwrite);
-                logger.success(`邮件 ID 为 ${itemId} 已增加“AI已读”标签。`);
-            } else {
-                logger.exchange(`邮件 ID 为 ${itemId} 已包含“AI已读”标签，无需重复添加。`);
+                return;
             }
-        } else {
-            if (!categoriesAny.includes(aiReadCategory)) {
-                categoriesAny.push(aiReadCategory);
-                await email.Update(ConflictResolutionMode.AlwaysOverwrite);
-                logger.success(`邮件 ID 为 ${itemId} 已增加“AI已读”标签。`);
-            } else {
-                logger.exchange(`邮件 ID 为 ${itemId} 已包含“AI已读”标签，无需重复添加。`);
+            await this.ensureAutodiscover();
+            logger.exchange(`正在为邮件 ID 为 ${itemId} 增加“AI已读”标签...`);
+            const email = await EmailMessage.Bind(
+                this.service,
+                new ItemId(itemId),
+            );
+            const aiReadCategory = "AI已读";
+            if (!email.Categories) {
+                // 使用 ews-javascript-api 的 StringList 而不是普通数组
+                email.Categories = new StringList();
             }
-        }
-    },
+            // StringList 并不完全等同于原生数组，使用 any 以便复用 includes/push 语义
+            const categoriesAny = email.Categories as any;
+            if (!categoriesAny.includes || !categoriesAny.push) {
+                // 兼容没有 includes/push 的 StringList：检查 Items 属性或 Count
+                const items = categoriesAny.Items || [];
+                if (!items.includes(aiReadCategory)) {
+                    items.push(aiReadCategory);
+                    if (categoriesAny.Items) {
+                        categoriesAny.Items = items;
+                    }
+                    await email.Update(ConflictResolutionMode.AlwaysOverwrite);
+                    logger.success(`邮件 ID 为 ${itemId} 已增加“AI已读”标签。`);
+                } else {
+                    logger.exchange(
+                        `邮件 ID 为 ${itemId} 已包含“AI已读”标签，无需重复添加。`,
+                    );
+                }
+            } else {
+                if (!categoriesAny.includes(aiReadCategory)) {
+                    categoriesAny.push(aiReadCategory);
+                    await email.Update(ConflictResolutionMode.AlwaysOverwrite);
+                    logger.success(`邮件 ID 为 ${itemId} 已增加“AI已读”标签。`);
+                } else {
+                    logger.exchange(
+                        `邮件 ID 为 ${itemId} 已包含“AI已读”标签，无需重复添加。`,
+                    );
+                }
+            }
+        },
 
-    /*判断指定邮件是否已被标记为“AI已读”
+        /*判断指定邮件是否已被标记为“AI已读”
     @param itemId - 邮件 ID
     @returns 是否已标记为“AI已读”
     */
-    isEmailMarkedAsAIRead: async (itemId: string): Promise<boolean> => {
-        if (this.authMode === 'graph') {
-            const response = await axios.get(`${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}?$select=categories`, {
-                headers: this.getGraphHeaders()
-            });
-            const categories: string[] = Array.isArray(response.data?.categories) ? response.data.categories : [];
-            return categories.includes('AI已读');
-        }
-        await this.ensureAutodiscover();
-        logger.exchange(`正在检查邮件 ID 为 ${itemId} 是否已标记为“AI已读”...`);
-        const email = await EmailMessage.Bind(this.service, new ItemId(itemId));
-        const aiReadCategory = 'AI已读';
-        if (!email.Categories) {
-            return false;
-        }
+        isEmailMarkedAsAIRead: async (itemId: string): Promise<boolean> => {
+            if (this.authMode === "graph") {
+                const response = await axios.get(
+                    `${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}?$select=categories`,
+                    {
+                        headers: this.getGraphHeaders(),
+                    },
+                );
+                const categories: string[] = Array.isArray(
+                    response.data?.categories,
+                )
+                    ? response.data.categories
+                    : [];
+                return categories.includes("AI已读");
+            }
+            await this.ensureAutodiscover();
+            logger.exchange(
+                `正在检查邮件 ID 为 ${itemId} 是否已标记为“AI已读”...`,
+            );
+            const email = await EmailMessage.Bind(
+                this.service,
+                new ItemId(itemId),
+            );
+            const aiReadCategory = "AI已读";
+            if (!email.Categories) {
+                return false;
+            }
 
-        const categoriesAny = email.Categories as any;
-        if (!categoriesAny.includes) {
-            const items = categoriesAny.Items || [];
-            return items.includes(aiReadCategory);
-        } else {
-            return categoriesAny.includes(aiReadCategory);
-        }
-    }
-    }
-
-
-
-
+            const categoriesAny = email.Categories as any;
+            if (!categoriesAny.includes) {
+                const items = categoriesAny.Items || [];
+                return items.includes(aiReadCategory);
+            } else {
+                return categoriesAny.includes(aiReadCategory);
+            }
+        },
+    };
 }

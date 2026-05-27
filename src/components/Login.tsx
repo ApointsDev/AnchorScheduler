@@ -36,6 +36,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     if (callbackToken) {
       setToken(callbackToken);
+      // CAF 回调时附带邮箱参数，存入 localStorage 供 Dashboard 显示
+      const callbackEmail = params.get('email');
+      if (callbackEmail) {
+        localStorage.setItem('user_email', callbackEmail);
+        params.delete('email');
+      }
       try { authEvents.dispatchEvent(new Event('login')); } catch (_) {}
       params.delete('token');
       params.delete('from');

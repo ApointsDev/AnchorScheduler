@@ -67,8 +67,10 @@ export const mcpTools: MCPToolsMap = {
             isReminderOn: z.boolean().optional().describe("Whether to set a reminder"),
             scheduleType: z.enum(scheduleTypeValues as unknown as [ScheduleType, ...ScheduleType[]]).optional().describe("Explicit schedule type metadata controlling recurrence behavior"),
         },
-        execute: async (args: { name: string, startTime?: string, endTime?: string, description?: string, location?: string, type?: string, importance?: 'high' | 'normal' | 'low', isReminderOn?: boolean, recurrenceRule?: RecurrenceRule, scheduleType?: ScheduleType }, user: User) => {
+        execute: async (args: { name: string, startTime?: string, endTime?: string, description?: string, location?: string, type?: string, importance?: 'high' | 'normal' | 'low', isReminderOn?: boolean, recurrenceRule?: RecurrenceRule, scheduleType?: ScheduleType, _internal_approve?: boolean, _internal_allow_conflict?: boolean }, user: User) => {
             let { name, startTime, endTime, description, location, importance, isReminderOn, recurrenceRule, scheduleType } = args;
+            const allowConflictOverride = (args as any)._internal_allow_conflict === true;
+            const effectiveAllowConflict = allowConflictOverride || !!user.isConflictScheduleAllowed;
             
             if (!name) {
                 return { content: [{ type: "text" as const, text: "Error: Task name is required." }] };
@@ -122,7 +124,7 @@ export const mcpTools: MCPToolsMap = {
 
                 parentConflicts = findConflictingTasks(existingTasks, candidate, { boundaryConflict: !!user.conflictBoundaryInclusive });
 
-                if (parentConflicts.length > 0 && !resolvedRecurrenceRule) {
+                if (!allowConflictOverride && parentConflicts.length > 0 && !resolvedRecurrenceRule) {
                     const conflictNames = parentConflicts.map(t => t.name).join(', ');
                     const message = `Schedule conflict detected with: ${conflictNames}`;
                     
@@ -158,7 +160,7 @@ export const mcpTools: MCPToolsMap = {
                     // If recurrenceRule provided, attach serialized rule to parent task
                     if (resolvedRecurrenceRule) newTask.recurrenceRule = JSON.stringify(resolvedRecurrenceRule);
 
-                    await dbService.addTask(user.id, newTask, !!user.conflictBoundaryInclusive, user.isConflictScheduleAllowed);
+                    await dbService.addTask(user.id, newTask, !!user.conflictBoundaryInclusive, effectiveAllowConflict);
                     await dbService.refreshUserTasksIncremental(user, { addedIds: [newTask.id] });
                     broadcastTaskChange('created', newTask as Task, user.id);
 
@@ -199,7 +201,7 @@ export const mcpTools: MCPToolsMap = {
                                     await logUserEvent(user.id, 'taskCreated', `Created recurrence instance ${inst.name}`, { id: inst.id, parentTaskId: inst.parentTaskId, startTime: inst.startTime, endTime: inst.endTime });
                                 }
 
-                                await dbService.addTask(user.id, inst, !!user.conflictBoundaryInclusive, user.isConflictScheduleAllowed);
+                                await dbService.addTask(user.id, inst, !!user.conflictBoundaryInclusive, effectiveAllowConflict);
                                 createdChildren++;
                                 createdIds.push(inst.id);
                                 broadcastTaskChange('created', inst as Task, user.id);
