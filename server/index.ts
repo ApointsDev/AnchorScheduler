@@ -13,6 +13,8 @@ import jwt from "jsonwebtoken";
 import { dbService } from "./Services/dbService";
 import { initializeApiRoutes } from "./routes/apiRoutes";
 import { initializeAlgorithmRoutes } from "./routes/algorithmRoutes";
+import { initializeDoubaoRoutes } from "./routes/doubaoRoutes";
+import { initializeSpeechRoutes } from "./routes/speechRoutes";
 import ebridgeRoutes from "./routes/ebridgeRoutes";
 import { initWebSocket, broadcastUserLog } from "./Services/websocket";
 import { logUserEvent } from "./Services/userLog";
@@ -21,7 +23,17 @@ import { startIntervals } from "./intervals";
 import { initializeMcpRoutes } from "./Services/mcp";
 import { initializeCalDavServer } from "./routes/caldavServerRoutes.js";
 import { createAdminRouter } from "./routes/adminRoutes.js";
+import { initializeTodoRoutes } from "./routes/todoRoutes.js";
+import { initializeUserStatusRoutes } from "./routes/userStatusRoutes.js";
+import { initializeCommunityRoutes } from "./routes/communityRoutes.js";
+import { initializeUserProfileRoutes } from "./routes/userProfileRoutes.js";
+import { initializeFollowRoutes } from "./routes/followRoutes.js";
+import { initializeRejectionBufferRoutes } from "./routes/rejectionBufferRoutes.js";
+import { initializeChaoxingRoutes } from "./routes/chaoxingRoutes";
+import { initializeReminderStateRoutes } from "./routes/reminderStateRoutes";
+import { initializeArchiveRoutes } from "./routes/archiveRoutes.js";
 import cors from "cors";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createAuthRoutes } from "./routes/authRoutes";
@@ -29,10 +41,30 @@ import {
     createCafConfig,
     ensureCafClientCredentials,
 } from "./Services/cafAuth";
-import type { User, Task, Profile } from "./types/models";
+import type {
+    User,
+    Task,
+    Profile,
+    Todo,
+    Tag,
+    Schedule,
+    UserStatus,
+    CommunityRegion,
+    CommunityRankingResult,
+} from "./types/models";
 
 // 重新导出，保持向后兼容
-export type { User, Task, Profile };
+export type {
+    User,
+    Task,
+    Profile,
+    Todo,
+    Tag,
+    Schedule,
+    UserStatus,
+    CommunityRegion,
+    CommunityRankingResult,
+};
 
 // Load environment variables
 dotenv.config({ path: "server/.env" });
@@ -240,6 +272,15 @@ app.get("/auth", (req, res) => {
 });
 
 app.get("/redirect", async (req, res) => {
+    logger.info(
+        "MS redirect received, code:",
+        !!req.query.code,
+        "state:",
+        !!req.query.state,
+        "jwt:",
+        !!req.query.jwt,
+    );
+
     const tokenRequest = {
         code: req.query.code as string,
         scopes: ["https://graph.microsoft.com/Tasks.ReadWrite"],
@@ -257,6 +298,10 @@ app.get("/redirect", async (req, res) => {
                     req.query.state as string,
                     "base64",
                 ).toString("utf8");
+                logger.info(
+                    "State decoded to JWT, length:",
+                    providedJwt.length,
+                );
             } catch {
                 logger.warn("Invalid state encoding");
             }
@@ -271,6 +316,7 @@ app.get("/redirect", async (req, res) => {
 
         if (providedJwt) {
             const decoded = verifyJwt(providedJwt);
+            logger.info("JWT verified:", !!decoded, "sub:", decoded?.sub);
             if (decoded?.sub) {
                 const paired = await pairMsTokenToUser(
                     decoded.sub as string,
@@ -278,14 +324,22 @@ app.get("/redirect", async (req, res) => {
                 );
                 if (paired) {
                     logger.info(`Paired MS token to user ${decoded.sub}`);
-                    return res.send(
-                        "Authentication successful and MS token paired to your account.",
+                    return res.redirect(
+                        `${FRONTEND_URL}/dashboard?ms_bound=true`,
                     );
                 }
+                logger.warn(
+                    `User not found for MS token pairing: ${decoded.sub}`,
+                );
+            } else {
+                logger.warn("Invalid JWT in MS auth redirect state");
             }
+        } else {
+            logger.warn(
+                "MS auth redirect without JWT/state, cannot pair to user",
+            );
         }
-        res.send("身份认证成功！您已经成功绑定微软To Do。将重新跳转回主页");
-        res.redirect(FRONTEND_URL);
+        return res.redirect(`${FRONTEND_URL}/dashboard?ms_bound=false`);
     } catch (error) {
         logger.error("Token acquisition error:", error);
         res.status(500).send("Authentication failed");
@@ -310,10 +364,43 @@ app.use(
 );
 
 // API 路由
-app.use("/api", initializeApiRoutes(authenticateToken));
+app.use("/api", initializeApiRoutes(authenticateToken, FRONTEND_URL));
+
+// 待办 / 标签路由
+app.use("/api", initializeTodoRoutes(authenticateToken));
+
+// 归档路由（ARC-001）
+app.use("/api", initializeArchiveRoutes(authenticateToken));
+
+// 用户状态统计路由
+app.use("/api", initializeUserStatusRoutes(authenticateToken));
+
+// 社区排名路由
+app.use("/api", initializeCommunityRoutes(authenticateToken));
+
+// 用户关注
+app.use("/api", initializeFollowRoutes(authenticateToken));
+
+// 用户个人主页
+app.use("/api", initializeUserProfileRoutes(authenticateToken));
+
+// 事件拒绝缓冲池路由
+app.use("/api", initializeRejectionBufferRoutes(authenticateToken));
+
+// 学习通 / Chaoxing
+app.use("/api", initializeChaoxingRoutes(authenticateToken));
+
+// 跨设备提醒已读状态同步
+app.use("/api", initializeReminderStateRoutes(authenticateToken));
 
 // 算法路由
 app.use("/api/algorithms", initializeAlgorithmRoutes(authenticateToken));
+
+// 豆包多模态路由
+app.use("/api/doubao", initializeDoubaoRoutes(authenticateToken));
+
+// 讯飞语音识别路由
+app.use("/api/speech", initializeSpeechRoutes(authenticateToken));
 
 // Ebridge 路由
 app.use("/api/ebridge", ebridgeRoutes);
@@ -361,10 +448,17 @@ initializeCalDavServer({
     },
 });
 
+// 用户上传资源（头像等）— 须在 catch-all 之前
+const uploadsDir = path.join(process.cwd(), "private", "uploads");
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use("/uploads", express.static(uploadsDir));
+
 // 静态文件
 app.use(express.static(path.join(__dirname, "../../dist")));
 app.get("*", (req, res) => {
-    if (req.path.startsWith("/api")) {
+    if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
         return res.status(404).json({ error: "Not Found" });
     }
     res.sendFile(path.join(__dirname, "../../dist/index.html"), (err) => {

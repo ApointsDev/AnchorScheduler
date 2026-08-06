@@ -40,6 +40,7 @@ import { User, Task } from "../index.js";
 import { v4 as uuidv4 } from "uuid";
 import { mcpTools } from "./mcp.js";
 import { dbService } from "./dbService.js";
+import { logUserEvent } from "./userLog";
 import toShanghaiISO from "../Utils/time.js";
 
 // 以下代码将禁用 SSL/TLS 证书验证。
@@ -111,6 +112,12 @@ export class ExchangeClient {
     }
 
     private parseEmailFromGraph(message: any, includeBody: boolean): IEmail {
+        const graphFlags: string[] = [];
+        if (message.isRead) graphFlags.push("\\Seen");
+        // Microsoft Graph 的 flag 属性表示后续标记（红旗）
+        if (message.flag?.flagStatus === "flagged") {
+            graphFlags.push("\\Flagged");
+        }
         return {
             id: message.id,
             subject: message.subject || "(无主题)",
@@ -127,6 +134,9 @@ export class ExchangeClient {
                 message.receivedDateTime || new Date().toISOString(),
             ),
             isRead: !!message.isRead,
+            isFlagged: message.flag?.flagStatus === "flagged",
+            flags: graphFlags,
+            isAiProcessed: false,
             body: includeBody
                 ? this.cleanHtmlContent(message.body?.content || "")
                 : undefined,
@@ -169,7 +179,8 @@ export class ExchangeClient {
         const query = new URLSearchParams({
             $top: String(top),
             $orderby: "receivedDateTime desc",
-            $select: "id,subject,from,receivedDateTime,isRead,hasAttachments",
+            $select:
+                "id,subject,from,receivedDateTime,isRead,hasAttachments,flag",
         });
         if (onlyUnread) {
             query.append("$filter", "isRead eq false");
@@ -188,7 +199,7 @@ export class ExchangeClient {
     private async graphGetMessageById(itemId: string): Promise<IEmail> {
         const query = new URLSearchParams({
             $select:
-                "id,subject,from,receivedDateTime,isRead,hasAttachments,body,categories",
+                "id,subject,from,receivedDateTime,isRead,hasAttachments,body,categories,flag",
         });
         const response = await axios.get(
             `${ExchangeClient.GRAPH_BASE_URL}/me/messages/${itemId}?${query.toString()}`,
@@ -284,6 +295,16 @@ export class ExchangeClient {
                     this.user.ExchangeTokenExpiresAt = expiresAt;
 
                     await dbService.updateUser(this.user);
+
+                    await logUserEvent(
+                        this.user.id,
+                        "exchange_token_refreshed",
+                        `Exchange token 刷新成功`,
+                        {
+                            expiresAt: new Date(expiresAt).toISOString(),
+                            expiresIn: expires_in || 3600,
+                        },
+                    );
                 }
                 // Also update cache in index.ts if possible, but dbService usually handles persistence.
                 // Since user object is passed by reference from index.ts in many cases (userCache), modification here might be enough for memory updates.
@@ -291,10 +312,19 @@ export class ExchangeClient {
                 logger.success(
                     `Exchange OAuth token refreshed successfully for user ${this.user ? this.user.id : "unknown"}`,
                 );
-            } catch (err: any) {
-                logger.error(
-                    `Failed to refresh Exchange token: ${err.message}`,
-                );
+            } catch (err: unknown) {
+                const message =
+                    err instanceof Error ? err.message : String(err);
+                logger.error(`Failed to refresh Exchange token: ${message}`);
+
+                if (this.user) {
+                    await logUserEvent(
+                        this.user.id,
+                        "exchange_token_refresh_failed",
+                        `Exchange token 刷新失败`,
+                        { error: message },
+                    );
+                }
                 // Don't stop timer, retry next time
             }
         }, REFRESH_INTERVAL);
@@ -750,14 +780,14 @@ export class ExchangeClient {
                 if (err.response?.status === 401) {
                     if (this.user) {
                         this.user.MStoken = "";
-                        this.user.MSbinded = false;
+                        // 不清除 MSbinded
                         try {
                             await (
                                 await import("./dbService")
                             ).dbService.updateUser(this.user);
                         } catch {}
                         logger.error(
-                            `MS Graph 401 detected; cleared MStoken and set MSbinded=false for user ${this.user.id}`,
+                            `MS Graph 401 detected; cleared MStoken for user ${this.user.id}`,
                         );
                     }
                 }
@@ -771,6 +801,21 @@ export class ExchangeClient {
     // 自动处理新邮件
     public async autoProcessNewEmail(email: IEmail) {
         try {
+            // 检查是否已被 AI 处理过（防止重启/重连后重复处理）
+            if (this.user?.id && email.id) {
+                const alreadyProcessed = await dbService.isEmailAiProcessed(
+                    this.user.id,
+                    String(email.id),
+                    "exchange",
+                );
+                if (alreadyProcessed) {
+                    logger.exchange(
+                        `邮件 ${email.id} (${email.subject}) 已 AI 处理过，跳过`,
+                    );
+                    return;
+                }
+            }
+
             logger.exchange(`开始自动处理邮件: ${email.subject}`);
 
             // 调试日志：只检查邮件正文是否存在，不输出内容
@@ -783,6 +828,21 @@ export class ExchangeClient {
 
             // 触发后续处理逻辑
             await this.handleProcessedData(apiResponse, email);
+
+            // 标记 AI 已处理
+            if (this.user?.id && email.id) {
+                try {
+                    await dbService.markEmailAiProcessed(
+                        this.user.id,
+                        String(email.id),
+                        "exchange",
+                    );
+                } catch (err: any) {
+                    logger.error(
+                        `标记 Exchange AI 已处理失败: ${err.message || "未知错误"}`,
+                    );
+                }
+            }
 
             logger.success(`成功自动处理邮件: ${email.subject}`);
         } catch (error: any) {
@@ -848,33 +908,73 @@ export class ExchangeClient {
         return this.llmApi.processEmail(email);
     }
 
-    // 触发后续处理逻辑
+    // 触发后续处理逻辑（与 emailProcessor 对齐：校验失败不入队；按工具名分日程/待办）
     private async handleProcessedData(
         processedData: any,
         email: IEmail,
     ): Promise<void> {
-        if (
+        if (processedData?.validationFailed) {
+            logger.error(
+                `Exchange 邮件工具/时间校验失败: ${email.subject} — ${processedData.lastValidationError || ""}`,
+            );
+            if (this.user) {
+                try {
+                    const { logUserEvent } = await import("./userLog");
+                    await logUserEvent(
+                        this.user.id,
+                        "ai_email_tool_validation_failed",
+                        `AI 处理邮件工具/时间校验失败: ${email.subject}`,
+                        {
+                            emailId: email.id,
+                            emailSubject: email.subject,
+                            source: "exchange",
+                            lastValidationError:
+                                processedData.lastValidationError,
+                            lastToolCalls: processedData.lastToolCalls,
+                        },
+                    );
+                } catch {
+                    /* ignore */
+                }
+            }
+        } else if (
             !processedData.tool_calls ||
             processedData.tool_calls.length === 0
         ) {
             logger.exchange(`未触发任何工具调用`);
-            return;
-        }
-
-        for (const toolCall of processedData.tool_calls) {
-            const functionName = (toolCall as any).function.name;
-            const args = JSON.parse((toolCall as any).function.arguments);
-
-            logger.exchange(
-                `处理工具调用: ${functionName}, 参数: ${JSON.stringify(args)}`,
-            );
-
-            if (functionName === "add_schedule") {
-                await this.handleAddScheduleTool(args, email);
-            } else if (functionName === "log_info") {
-                await this.handleLogInfoTool(args, email);
-            } else {
-                logger.warn(`未知的工具调用: ${functionName}`);
+        } else if (this.user) {
+            try {
+                const { enqueueValidatedToolCalls } = await import(
+                    "./emailProcessor"
+                );
+                const attachmentsCount =
+                    (email.attachments && (email.attachments as any).Count) ??
+                    (Array.isArray((email as any).attachments)
+                        ? (email as any).attachments.length
+                        : 0);
+                const emailForProc = {
+                    id: email.id,
+                    subject: email.subject,
+                    from: email.from,
+                    receivedAt: email.receivedAt,
+                    isRead: email.isRead,
+                    body: this.cleanHtmlContent(email.body || ""),
+                    hasAttachments: !!email.hasAttachments,
+                    attachmentsCount,
+                };
+                const enqueued = await enqueueValidatedToolCalls(
+                    this.user,
+                    emailForProc,
+                    "exchange",
+                    processedData.tool_calls,
+                );
+                logger.success(
+                    `Exchange 邮件入队: 日程 ${enqueued.queuedSchedules.length} / 待办 ${enqueued.queuedTodos.length}`,
+                );
+            } catch (err: any) {
+                logger.error(
+                    `Exchange 邮件入队失败: ${err?.message || err}`,
+                );
             }
         }
 
@@ -885,85 +985,6 @@ export class ExchangeClient {
         } catch (err: any) {
             logger.error(`标记邮件为AI已读失败: ${err.message || "未知错误"}`);
         }
-
-        // 分析邮件重要性
-        // if (this.llmApi) {
-        //     const importance = await this.llmApi.analyzeEmailImportance(email);
-        //     logger.exchange(`邮件重要性: ${importance.importance}，理由: ${importance.reason}`);
-        // }
-    }
-
-    private async handleAddScheduleTool(
-        args: any,
-        email: IEmail,
-    ): Promise<void> {
-        if (!this.user) {
-            logger.error("无法创建任务：用户未初始化");
-            return;
-        }
-
-        // 确保 args 存在
-        const safeArgs = args || {};
-
-        // 如果没有提供任务名称，使用邮件主题作为默认名称
-        if (!safeArgs.name) {
-            logger.warn(
-                `LLM 未提供任务名称，使用邮件主题作为默认名称: ${email.subject}`,
-            );
-            safeArgs.name = email.subject || "未命名任务";
-        }
-
-        // 清理邮件正文内容
-        const cleanedEmailBody = this.cleanHtmlContent(email.body || "");
-        const description = `来自邮件: ${email.subject}`;
-
-        const toolArgs = {
-            ...safeArgs,
-            description,
-        };
-
-        // 自动化（LLM）处理邮件时，日程请求入队，不直接入库
-        try {
-            const dbService = (await import("./dbService")).dbService;
-
-            // 构造一个 JSON-safe 的精简 email 对象，避免将可能包含循环引用的复杂对象序列化入库
-            const attachmentsCount =
-                (email.attachments && (email.attachments as any).Count) ??
-                (Array.isArray((email as any).attachments)
-                    ? (email as any).attachments.length
-                    : 0);
-
-            const safeEmail = {
-                id: email.id,
-                subject: email.subject,
-                from: email.from,
-                receivedAt: email.receivedAt,
-                isRead: email.isRead,
-                body: this.cleanHtmlContent(email.body || ""),
-                hasAttachments: !!email.hasAttachments,
-                attachmentsCount: attachmentsCount,
-            };
-
-            const payload = {
-                args: toolArgs,
-                email: safeEmail,
-                _meta: { source: "exchange", createdAt: toShanghaiISO() },
-            };
-
-            const rawRequest = JSON.stringify(payload);
-            await dbService.addScheduleToQueue(this.user.id, rawRequest);
-            logger.success(
-                `已将日程请求加入队列，待用户确认: ${toolArgs.name}`,
-            );
-        } catch (err: any) {
-            logger.error(`日程队列入库失败: ${err.message || "未知错误"}`);
-        }
-    }
-
-    private async handleLogInfoTool(args: any, email: IEmail): Promise<void> {
-        logger.exchange(
-            `信息通知已记录: ${args.summary} (重要性: ${args.importance})`,
-        );
     }
 
     // 健康检查定时
@@ -1107,6 +1128,13 @@ export class ExchangeClient {
             // 将 EWS item 转换为我们的 IEmail 格式（不包含正文，将在需要时单独获取）
             const emails = findResults.Items.map((item) =>
                 this.parseEmailFromEWS(item as EmailMessage, false),
+            );
+
+            // 按接收时间降序排序（最新邮件在前）
+            emails.sort(
+                (a, b) =>
+                    new Date(b.receivedAt).getTime() -
+                    new Date(a.receivedAt).getTime(),
             );
 
             // 调试日志：只记录邮件主题信息
@@ -1366,6 +1394,23 @@ export class ExchangeClient {
             ? this.cleanHtmlContent(email.Body?.Text || "")
             : undefined;
 
+        // 读取 EWS 标记状态
+        let isFlagged = false;
+        const ewsFlags: string[] = [];
+        try {
+            if (email.IsRead) ewsFlags.push("\\Seen");
+            // EWS 中 Flag.FlagStatus 表示后续标记（红旗）
+            if (
+                (email as any).Flag &&
+                (email as any).Flag.FlagStatus === "Flagged"
+            ) {
+                isFlagged = true;
+                ewsFlags.push("\\Flagged");
+            }
+        } catch {
+            // Flag 属性可能不可用
+        }
+
         return {
             id: email.Id.UniqueId,
             subject: email.Subject,
@@ -1374,6 +1419,9 @@ export class ExchangeClient {
                 email.DateTimeReceived.MomentDate.toISOString(),
             ),
             isRead: email.IsRead,
+            isFlagged,
+            flags: ewsFlags,
+            isAiProcessed: false,
             body: bodyText,
             hasAttachments: email.HasAttachments,
             attachments: email.Attachments,

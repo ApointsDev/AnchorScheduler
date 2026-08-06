@@ -1,348 +1,531 @@
-@import './variables.css';
+@import "./tokens.css";
 
-.ai-chat-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  max-width: 1000px;
-  margin: 0 auto;
+/* ── 手机端全屏浮动布局 ────────────────────────────────── */
+.ai-chat-mobile {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--color-bg-card);
 }
 
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.ai-chat-mobile .chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-card);
+    flex-shrink: 0;
+}
+
+.ai-chat-mobile .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-4);
+}
+
+/* ── 撤销按钮行 ───────────────────────────────────── */
+.chat-undo-row {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 var(--space-4) var(--space-1);
+}
+
+.ai-chat-mobile .settings-panel {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.chat-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.chat-header-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-dark);
+}
+
+.chat-header-actions {
+    display: flex;
+    gap: var(--space-1);
+    align-items: center;
+}
+
+/* ── PC 端 ────────────────────────────────────────────── */
+
+.ai-chat-container .chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .settings-panel {
-  padding: 20px;
-  background: var(--color-bg-light);
-  border-bottom: 1px solid var(--color-border);
+    padding: var(--space-5);
+    background: var(--color-bg-light);
+    border-bottom: 1px solid var(--color-border);
 }
 
 .settings-form {
-  display: grid;
-  gap: 16px;
+    display: grid;
+    gap: var(--space-4);
 }
 
 .chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    transition:
+        opacity var(--duration-normal) ease,
+        transform var(--duration-slow) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 切换对话历史时的灵动动画 */
+.chat-messages.switching {
+    opacity: 0.45;
+    transform: translateY(8px);
 }
 
 .message {
-  display: flex;
-  gap: 12px;
-  max-width: 85%;
+    display: flex;
+    gap: var(--space-3);
+    max-width: 85%;
 }
 
 .message.user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
+    align-self: flex-end;
+    flex-direction: row-reverse;
 }
 
 .message.assistant {
-  align-self: flex-start;
+    align-self: flex-start;
 }
 
 .message.tool {
-  align-self: center;
-  max-width: 90%;
-  font-size: 0.85rem;
-  width: 100%;
-  justify-content: center;
+    align-self: center;
+    max-width: 90%;
+    font-size: 0.85rem;
+    width: 100%;
+    justify-content: center;
 }
 
 .avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 1.2rem;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.2rem;
 }
 
 .user .avatar {
-  background: var(--color-chat-user-bg);
-  color: var(--color-white);
+    background: var(--color-chat-user-bg);
+    color: var(--color-white);
 }
 
 .assistant .avatar {
-  background: var(--color-success);
-  color: var(--color-white);
+    background: var(--color-chat-assistant-bg);
+    color: var(--color-white);
+    overflow: hidden;
+}
+
+/* ── Bot avatar image (replaces lucide Bot icon) ───── */
+.chat-bot-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.chat-bot-avatar-lg {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
 }
 
 .message-content {
-  padding: 12px 16px;
-  border-radius: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  font-size: 0.9rem;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-xl);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    font-size: 0.9rem;
 }
 
 .user .message-content {
-  background: var(--color-chat-user-bg);
-  color: var(--color-white);
-  border-bottom-right-radius: 4px;
+    background: var(--color-chat-user-bg);
+    color: var(--color-white);
+    border-bottom-right-radius: var(--radius-sm);
 }
 
 .assistant .message-content {
-  background: var(--color-chat-assistant-bg);
-  color: var(--color-chat-assistant-text);
-  border-bottom-left-radius: 4px;
+    background: var(--color-chat-assistant-bg);
+    color: var(--color-chat-assistant-text);
+    border-bottom-left-radius: var(--radius-sm);
 }
 
 .tool-result-container {
-  background: var(--color-bg-light);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  width: 100%;
-  overflow: hidden;
-  transition: all 0.2s ease;
-  margin-top: 4px;
-  margin-bottom: 4px;
-  margin-left: auto;
-  margin-right: auto;
+    background: var(--color-bg-light);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    overflow: hidden;
+    transition: all var(--duration-normal) ease;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .tool-result-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  cursor: pointer;
-  background: rgba(0, 0, 0, 0.02);
-  user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.02);
+    user-select: none;
 }
 
 .tool-result-header:hover {
-  background: rgba(0, 0, 0, 0.05);
+    background: rgba(0, 0, 0, 0.05);
 }
 
 .tool-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
 }
 
 .tool-name {
-  font-weight: 500;
-  color: var(--color-text-primary);
+    font-weight: 500;
+    color: var(--color-text-primary);
 }
 
 .tool-toggle {
-  color: var(--color-text-light);
-  display: flex;
-  align-items: center;
+    color: var(--color-text-light);
+    display: flex;
+    align-items: center;
 }
 
 .tool-result-body {
-  padding: 0;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg-white);
+    padding: 0;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg-white);
 }
 
 .tool-result-body pre {
-  margin: 0;
-  padding: 12px;
-  overflow-x: auto;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 0.8rem;
-  color: var(--color-text-primary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 300px;
-  overflow-y: auto;
+    margin: 0;
+    padding: var(--space-3);
+    overflow-x: auto;
+    font-family: "Consolas", "Monaco", monospace;
+    font-size: 0.8rem;
+    color: var(--color-text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 300px;
+    overflow-y: auto;
 }
 
 .tool-call-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-  background: rgba(0, 0, 0, 0.05);
-  padding: 4px 8px;
-  border-radius: 4px;
-  width: fit-content;
-  margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    background: rgba(0, 0, 0, 0.05);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    width: fit-content;
+    margin-top: 4px;
 }
 
 .chat-input-area {
-  padding: 20px;
-  border-top: 1px solid var(--color-border);
+    padding: var(--space-5);
+    border-top: 1px solid var(--color-border);
 }
 
 .input-wrapper {
-  display: flex;
-  gap: 12px;
-  position: relative;
-  align-items: flex-end;
+    display: flex;
+    gap: var(--space-3);
+    position: relative;
+    align-items: flex-end;
+}
+
+.send-btn {
+    height: 44px;
+    width: 44px;
+    padding: 0;
+    flex-shrink: 0;
 }
 
 .input-wrapper .ui-input-wrapper {
-  flex: 1;
-  margin-bottom: 0;
+    flex: 1;
+    margin-bottom: 0;
 }
 
 .loading-dots {
-  display: flex;
-  gap: 4px;
-  padding: 8px;
+    display: flex;
+    gap: var(--space-1);
+    padding: var(--space-2);
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
-  background: var(--color-chat-loading-dot);
-  border-radius: 50%;
-  animation: bounce 1.4s infinite ease-in-out both;
+    width: 8px;
+    height: 8px;
+    background: var(--color-chat-loading-dot);
+    border-radius: 50%;
+    animation: bounce 1.4s infinite ease-in-out both;
 }
 
-.dot:nth-child(1) { animation-delay: -0.32s; }
-.dot:nth-child(2) { animation-delay: -0.16s; }
+.dot:nth-child(1) {
+    animation-delay: -0.32s;
+}
+.dot:nth-child(2) {
+    animation-delay: -0.16s;
+}
 
 @keyframes bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+    0%,
+    80%,
+    100% {
+        transform: scale(0);
+    }
+    40% {
+        transform: scale(1);
+    }
 }
 
 .tool-calls-preview {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
 }
 
 /* Markdown Styles */
 .message-content.markdown-body {
-  white-space: normal; /* Let markdown handle spacing */
-  overflow-wrap: break-word;
+    white-space: normal; /* Let markdown handle spacing */
+    overflow-wrap: break-word;
 }
 
 .message-content p {
-  margin: 0 0 10px 0;
+    margin: 0 0 10px 0;
 }
 
 .message-content p:last-child {
-  margin-bottom: 0;
+    margin-bottom: 0;
 }
 
-.message-content h1, 
-.message-content h2, 
-.message-content h3, 
+.message-content h1,
+.message-content h2,
+.message-content h3,
 .message-content h4 {
-  margin: 16px 0 8px 0;
-  font-weight: 600;
-  line-height: 1.25;
+    margin: var(--space-4) 0 var(--space-2) 0;
+    font-weight: 600;
+    line-height: 1.25;
 }
 
-.message-content h1 { font-size: 1.25em; }
-.message-content h2 { font-size: 1.15em; }
-.message-content h3 { font-size: 1.05em; }
-.message-content h4 { font-size: 1em; }
+.message-content h1 {
+    font-size: 1.25em;
+}
+.message-content h2 {
+    font-size: 1.15em;
+}
+.message-content h3 {
+    font-size: 1.05em;
+}
+.message-content h4 {
+    font-size: 1em;
+}
 
-.message-content h1:first-child, 
-.message-content h2:first-child, 
+.message-content h1:first-child,
+.message-content h2:first-child,
 .message-content h3:first-child {
-  margin-top: 0;
+    margin-top: 0;
 }
 
-.message-content ul, 
+.message-content ul,
 .message-content ol {
-  margin: 0 0 10px 0;
-  padding-left: 20px;
+    margin: 0 0 10px 0;
+    padding-left: 20px;
 }
 
 .message-content li {
-  margin-bottom: 4px;
+    margin-bottom: 4px;
 }
 
 .message-content code {
-  font-family: monospace;
-  padding: 2px 4px;
-  border-radius: 4px;
-  font-size: 0.9em;
+    font-family: monospace;
+    padding: 2px var(--space-1);
+    border-radius: var(--radius-sm);
+    font-size: 0.9em;
 }
 
 .assistant .message-content code {
-  background-color: rgba(0, 0, 0, 0.05);
-  color: #d63384;
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #d63384;
 }
 
 .user .message-content code {
-  background-color: rgba(255, 255, 255, 0.2);
-  color: inherit;
+    background-color: rgba(255, 255, 255, 0.2);
+    color: inherit;
 }
 
 .message-content pre {
-  padding: 12px;
-  border-radius: 6px;
-  overflow-x: auto;
-  margin: 10px 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    margin: 10px 0;
 }
 
 .assistant .message-content pre {
-  background-color: #f6f8fa;
-  border: 1px solid #e1e4e8;
+    background-color: var(--color-neutral-50);
+    border: 1px solid var(--color-neutral-200);
 }
 
 .user .message-content pre {
-  background-color: rgba(0, 0, 0, 0.3);
+    background-color: rgba(0, 0, 0, 0.3);
 }
 
 .message-content pre code {
-  background-color: transparent;
-  padding: 0;
-  color: inherit;
-  font-size: 0.85em;
+    background-color: transparent;
+    padding: 0;
+    color: inherit;
+    font-size: 0.85em;
 }
 
 .message-content blockquote {
-  margin: 10px 0;
-  padding-left: 10px;
-  border-left: 4px solid;
-  opacity: 0.8;
+    margin: 10px 0;
+    padding-left: 10px;
+    border-left: 4px solid;
+    opacity: 0.8;
 }
 
 .message-content table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 10px 0;
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10px 0;
 }
 
-.message-content th, 
+.message-content th,
 .message-content td {
-  padding: 6px 10px;
-  border: 1px solid;
+    padding: 6px 10px;
+    border: 1px solid;
 }
 
-.assistant .message-content th, 
+.assistant .message-content th,
 .assistant .message-content td {
-  border-color: #d0d7de;
+    border-color: var(--color-neutral-200);
 }
 
-.user .message-content th, 
+.user .message-content th,
 .user .message-content td {
-  border-color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .message-content a {
-  text-decoration: underline;
+    text-decoration: underline;
 }
 
 .assistant .message-content a {
-  color: var(--color-primary);
+    color: var(--color-primary);
 }
 
 .user .message-content a {
-  color: inherit;
+    color: inherit;
+}
+
+/* ── 欢迎页（Gemini 风格） ─────────────────────────────── */
+.chat-welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--space-10) var(--space-6);
+    flex: 1;
+    gap: var(--space-4);
+}
+
+.chat-welcome-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+
+.chat-welcome-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--color-text-dark);
+    margin: 0;
+}
+
+.chat-welcome-desc {
+    font-size: 0.9rem;
+    color: var(--color-text-light);
+    max-width: 320px;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.chat-welcome-hints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.chat-welcome-hints span {
+    padding: var(--space-2) 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-2xl);
+    font-size: 0.82rem;
+    color: var(--color-text-medium);
+    cursor: pointer;
+    transition:
+        background var(--duration-fast),
+        border-color var(--duration-fast);
+}
+
+.chat-welcome-hints span:active {
+    background: var(--color-bg-hover);
+    border-color: var(--color-primary);
+}
+
+/* ── 系统通知（居中淡色文字） ──────────────────────────── */
+.system-notice {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--color-text-light);
+    padding: var(--space-2) var(--space-5);
+    margin: var(--space-1) auto;
+    max-width: 85%;
+    background: var(--color-bg-light);
+    border-radius: var(--radius-md);
+    line-height: 1.4;
+}
+
+/* ── 消息中的图片 ────────────────────────────────────── */
+.message-image {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: var(--radius-lg);
+    margin-bottom: 8px;
+    display: block;
 }

@@ -1,59 +1,87 @@
-@import './styles/variables.css';
+@import "./styles/tokens.css";
 
 /* 全局样式重置 */
 * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-html, body, #root {
-  height: 100%;
-  width: 100%;
+html,
+body,
+#root {
+    height: 100%;
+    width: 100%;
 }
-
-
 
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+        sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+    font-family:
+        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
 /* 确保所有图片是响应式的 */
 img {
-  max-width: 100%;
-  height: auto;
+    max-width: 100%;
+    height: auto;
 }
 
 /* 移除按钮的默认样式 */
 button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
 }
 
 /* 移除输入框的默认样式 */
 input {
-  font: inherit;
+    font: inherit;
 }
 
 /* 确保链接没有下划线 */
 a {
-  text-decoration: none;
-  color: inherit;
+    text-decoration: none;
+    color: inherit;
 }
 
-/* 防止文本选中时的高亮影响UI */
 ::selection {
-  background: rgba(102, 126, 234, 0.2);
+    background: rgba(102, 126, 234, 0.2);
+}
+
+/* ── 语言切换器 ─────────────────────────────────────── */
+.lang-switcher {
+    display: flex;
+    gap: 4px;
+    padding: 2px;
+    background: var(--color-bg-hover);
+    border-radius: var(--radius-lg);
+}
+
+.lang-btn {
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    border-radius: var(--radius-md);
+    color: var(--color-text-medium);
+    transition: all var(--duration-normal);
+}
+
+.lang-btn:hover {
+    color: var(--color-text-primary);
+}
+
+.lang-btn-active {
+    background: var(--color-bg-card);
+    color: var(--color-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }

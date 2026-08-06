@@ -1,20 +1,30 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import express, { Request, Response } from 'express';
-import type { User, Task } from '../index';
-import type { RecurrenceRule, ScheduleType } from './types';
-import { resolveScheduleType, scheduleTypeValues } from './types.js';
-import { dbService } from './dbService';
-import { v4 as uuidv4 } from 'uuid';
-import { logger } from '../Utils/logger.js';
-import { z } from 'zod';
-import { IEvent } from './types';
-import { findConflictingTasks, TimeLikeTask } from './scheduleConflict';
-import { logUserEvent } from './userLog';
-import { toShanghaiISO, ensureTimezone } from '../Utils/time.js';
-import { generateRecurrenceInstances, buildRecurrenceSummary } from './recurrence';
-import { broadcastTaskChange } from './websocket';
-import type { MCPToolsMap, MCPToolDefinition, AddScheduleArgs, AddScheduleResult, ReadEmailsArgs, ReadEmailsResult } from './mcpTypes';
+import express, { Request, Response } from "express";
+import type { User, Task } from "../index";
+import type { RecurrenceRule, ScheduleType } from "./types";
+import { resolveScheduleType, scheduleTypeValues } from "./types.js";
+import { dbService } from "./dbService";
+import { v4 as uuidv4 } from "uuid";
+import { logger } from "../Utils/logger.js";
+import { z } from "zod";
+import { IEvent } from "./types";
+import { findConflictingTasks, TimeLikeTask } from "./scheduleConflict";
+import { logUserEvent } from "./userLog";
+import { toShanghaiISO, ensureTimezone } from "../Utils/time.js";
+import {
+    generateRecurrenceInstances,
+    buildRecurrenceSummary,
+} from "./recurrence";
+import { broadcastTaskChange } from "./websocket";
+import type {
+    MCPToolsMap,
+    MCPToolDefinition,
+    AddScheduleArgs,
+    AddScheduleResult,
+    ReadEmailsArgs,
+    ReadEmailsResult,
+} from "./mcpTypes";
 
 // Store active transports: sessionId -> Transport
 const transports = new Map<string, SSEServerTransport>();
@@ -22,58 +32,331 @@ const transports = new Map<string, SSEServerTransport>();
 export const mcpTools: MCPToolsMap = {
     read_emails: {
         name: "read_emails",
-        description: "Read recent emails from the user's inbox",
+        description:
+            "Read recent emails from the user's inbox, or read a specific email by ID with full body content. " +
+            "Without id, lists recent emails with summaries. With id, returns the full email body for that specific email.",
         schema: {
-            limit: z.number().optional().describe("Number of emails to read (default 5)"),
+            limit: z
+                .number()
+                .optional()
+                .describe(
+                    "Number of emails to read (default 5, only used when id is not provided)",
+                ),
+            id: z
+                .string()
+                .optional()
+                .describe("Email ID to read full body content"),
         },
-        execute: async (args: { limit?: number }, user: User) => {
+        execute: async (args: { limit?: number; id?: string }, user: User) => {
             if (!user.emsClient && !user.imapClient) {
-                return { content: [{ type: "text" as const, text: "No email client initialized. Please bind Exchange or SMTP first and wait for the background sync." }] };
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: "No email client initialized. Please bind Exchange or SMTP first and wait for the background sync.",
+                        },
+                    ],
+                };
             }
             try {
                 const client = user.emsClient || user.imapClient!;
+
+                // 按 ID 读取单封邮件正文
+                if (args.id) {
+                    const email = await client.getEmailById(args.id);
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: JSON.stringify(
+                                    {
+                                        id: email.id,
+                                        subject: email.subject,
+                                        sender: email.from
+                                            ? email.from.name
+                                            : "Unknown",
+                                        senderAddress: email.from
+                                            ? email.from.address
+                                            : undefined,
+                                        receivedAt: email.receivedAt,
+                                        isRead: email.isRead,
+                                        hasAttachments: email.hasAttachments,
+                                        body: email.body,
+                                    },
+                                    null,
+                                    2,
+                                ),
+                            },
+                        ],
+                    };
+                }
+
+                // 列出最近邮件
                 const emails = await client.findEmails(args.limit || 5);
-                const fullEmails = await Promise.all(emails.map(async (e) => {
-                    try {
-                        return await client.getEmailById(e.id);
-                    } catch (err) {
-                        return e;
-                    }
+                const fullEmails = await Promise.all(
+                    emails.map(async (e) => {
+                        try {
+                            return await client.getEmailById(e.id);
+                        } catch (err) {
+                            return e;
+                        }
+                    }),
+                );
+
+                const emailSummaries = fullEmails.map((e) => ({
+                    id: e.id,
+                    subject: e.subject,
+                    sender: e.from ? e.from.name : "Unknown",
+                    body: e.body,
+                }));
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: JSON.stringify(emailSummaries, null, 2),
+                        },
+                    ],
+                };
+            } catch (error: any) {
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Error reading emails: ${error.message}`,
+                        },
+                    ],
+                };
+            }
+        },
+    },
+    search_emails: {
+        name: "search_emails",
+        description:
+            "Search emails by keyword. Searches subject, sender name, and sender address. Returns matching email summaries. Use this to find specific emails by topic, sender, or keyword.",
+        schema: {
+            query: z
+                .string()
+                .describe(
+                    "Search keyword — matched against subject and sender",
+                ),
+            limit: z
+                .number()
+                .optional()
+                .describe("Max results (default 20, max 50)"),
+        },
+        execute: async (
+            args: { query: string; limit?: number },
+            user: User,
+        ) => {
+            if (!args.query || !args.query.trim()) {
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: "Please provide a search query.",
+                        },
+                    ],
+                };
+            }
+
+            if (!user.emsClient && !user.imapClient) {
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: "No email client initialized. Please bind Exchange or SMTP first.",
+                        },
+                    ],
+                };
+            }
+
+            try {
+                const client = user.emsClient || user.imapClient!;
+                const query = args.query.toLowerCase().trim();
+                const fetchLimit = Math.max((args.limit || 20) * 5, 100);
+                const limit = Math.min(args.limit || 20, 50);
+
+                const emails = await client.findEmails(fetchLimit);
+                const matched = emails.filter((e: any) => {
+                    const subject = (e.subject || "").toLowerCase();
+                    const fromName = (e.from?.name || "").toLowerCase();
+                    const fromAddr = (e.from?.address || "").toLowerCase();
+                    return (
+                        subject.includes(query) ||
+                        fromName.includes(query) ||
+                        fromAddr.includes(query)
+                    );
+                });
+
+                const paged = matched.slice(0, limit);
+                const summaries = paged.map((e: any) => ({
+                    id: e.id,
+                    subject: e.subject,
+                    from: e.from,
+                    receivedAt: e.receivedAt,
                 }));
 
-                const emailSummaries = fullEmails.map(e => ({
-                    subject: e.subject,
-                    sender: e.from ? e.from.name : 'Unknown',
-                    body: e.body 
-                }));
-                return { content: [{ type: "text" as const, text: JSON.stringify(emailSummaries, null, 2) }] };
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: JSON.stringify(
+                                {
+                                    total: matched.length,
+                                    returned: summaries.length,
+                                    emails: summaries,
+                                },
+                                null,
+                                2,
+                            ),
+                        },
+                    ],
+                };
             } catch (error: any) {
-                return { content: [{ type: "text" as const, text: `Error reading emails: ${error.message}` }] };
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Error searching emails: ${error.message}`,
+                        },
+                    ],
+                };
             }
-        }
+        },
     },
     add_schedule: {
         name: "add_schedule",
-        description: "Add a new schedule/task based on the email content. You MUST extract the task name and time information.",
+        description:
+            "Add a new calendar schedule (有开始时间的时段事项). Use ONLY when the item has a start time (startTime). " +
+            "If there is only a due date / deadline and no start time, or no time at all, use add_todo instead. " +
+            "Do NOT invent a startTime to force this tool.",
         schema: {
-            name: z.string().describe("The title of the task, extracted from the email subject or content. MUST be provided."),
-            startTime: z.string().optional().describe("Start time in ISO 8601 format (e.g. 2023-10-01T09:00:00+08:00). If timezone is not specified in the email, assume China Standard Time (UTC+8)."),
-            endTime: z.string().optional().describe("End time in ISO 8601 format. If a duration is mentioned, calculate it. If a due date is mentioned, use that. Assume UTC+8 if not specified."),
-            description: z.string().optional().describe("Detailed description of the task, including any relevant content from the email body."),
-            recurrenceRule: z.any().optional().describe("Optional recurrence rule object, supports freq 'daily'|'weekly'|'weeklyByWeekNumber'|'dailyOnDays'"),
+            name: z
+                .string()
+                .describe(
+                    "The title of the task, extracted from the email subject or content. MUST be provided.",
+                ),
+            startTime: z
+                .string()
+                .optional()
+                .describe(
+                    "REQUIRED for schedule: Start time in ISO 8601 format (e.g. 2023-10-01T09:00:00+08:00). If timezone is not specified in the email, assume China Standard Time (UTC+8). Without startTime this tool is invalid — use add_todo.",
+                ),
+            endTime: z
+                .string()
+                .optional()
+                .describe(
+                    "End time in ISO 8601 format. Optional if startTime is present. Assume UTC+8 if not specified. Do NOT use endTime alone with this tool.",
+                ),
+            description: z
+                .string()
+                .optional()
+                .describe(
+                    "Detailed description of the task, including any relevant content from the email body.",
+                ),
+            recurrenceRule: z
+                .any()
+                .optional()
+                .describe(
+                    "Optional recurrence rule object, supports freq 'daily'|'weekly'|'weeklyByWeekNumber'|'dailyOnDays'",
+                ),
             location: z.string().optional().describe("Location of the event"),
-            type: z.enum(["meeting", "todo"]).optional().describe("Type of the schedule"),
-            importance: z.enum(["high", "normal", "low"]).optional().describe("Importance of the task"),
-            isReminderOn: z.boolean().optional().describe("Whether to set a reminder"),
-            scheduleType: z.enum(scheduleTypeValues as unknown as [ScheduleType, ...ScheduleType[]]).optional().describe("Explicit schedule type metadata controlling recurrence behavior"),
+            type: z
+                .enum(["meeting", "todo"])
+                .optional()
+                .describe("Type of the schedule"),
+            importance: z
+                .enum(["high", "normal", "low"])
+                .optional()
+                .describe("Importance of the task (high/normal/low)"),
+            importanceScore: z
+                .number()
+                .min(-1)
+                .max(1)
+                .optional()
+                .describe(
+                    "Eisenhower importance axis in [-1, 1]: positive = more important, negative = less important. Always set based on content urgency/priority.",
+                ),
+            urgencyScore: z
+                .number()
+                .min(-1)
+                .max(1)
+                .optional()
+                .describe(
+                    "Eisenhower urgency axis in [-1, 1]: positive = more urgent (near deadline/now), negative = not urgent. Always set based on time pressure.",
+                ),
+            isReminderOn: z
+                .boolean()
+                .optional()
+                .describe("Whether to set a reminder"),
+            allowConflict: z
+                .boolean()
+                .optional()
+                .describe(
+                    "Set to true to force-add the schedule even if it overlaps with existing tasks. Use this ONLY when the user explicitly requests to add despite conflicts (e.g. '强制添加', 'force add', 'add anyway').",
+                ),
+            scheduleType: z
+                .enum(
+                    scheduleTypeValues as unknown as [
+                        ScheduleType,
+                        ...ScheduleType[],
+                    ],
+                )
+                .optional()
+                .describe(
+                    "Explicit schedule type metadata controlling recurrence behavior",
+                ),
         },
-        execute: async (args: { name: string, startTime?: string, endTime?: string, description?: string, location?: string, type?: string, importance?: 'high' | 'normal' | 'low', isReminderOn?: boolean, recurrenceRule?: RecurrenceRule, scheduleType?: ScheduleType, _internal_approve?: boolean, _internal_allow_conflict?: boolean }, user: User) => {
-            let { name, startTime, endTime, description, location, importance, isReminderOn, recurrenceRule, scheduleType } = args;
-            const allowConflictOverride = (args as any)._internal_allow_conflict === true;
-            const effectiveAllowConflict = allowConflictOverride || !!user.isConflictScheduleAllowed;
-            
+        execute: async (
+            args: {
+                name: string;
+                startTime?: string;
+                endTime?: string;
+                description?: string;
+                location?: string;
+                type?: string;
+                importance?: "high" | "normal" | "low";
+                importanceScore?: number;
+                urgencyScore?: number;
+                isReminderOn?: boolean;
+                allowConflict?: boolean;
+                recurrenceRule?: RecurrenceRule;
+                scheduleType?: ScheduleType;
+                _internal_approve?: boolean;
+                _internal_allow_conflict?: boolean;
+            },
+            user: User,
+        ) => {
+            let {
+                name,
+                startTime,
+                endTime,
+                description,
+                location,
+                importance,
+                importanceScore,
+                urgencyScore,
+                isReminderOn,
+                recurrenceRule,
+                scheduleType,
+            } = args;
+            const allowConflictOverride =
+                (args as any)._internal_allow_conflict === true;
+            const publicAllowConflict = args.allowConflict === true;
+            const effectiveAllowConflict =
+                allowConflictOverride ||
+                publicAllowConflict ||
+                !!user.isConflictScheduleAllowed;
+
             if (!name) {
-                return { content: [{ type: "text" as const, text: "Error: Task name is required." }] };
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: "Error: Task name is required.",
+                        },
+                    ],
+                };
             }
 
             if (startTime) startTime = ensureTimezone(startTime);
@@ -89,18 +372,34 @@ export const mcpTools: MCPToolsMap = {
 
             // Validate dates
             const isValidDate = (d: string) => !isNaN(new Date(d).getTime());
-            if (!isValidDate(startTime as string) || !isValidDate(endTime as string)) {
-                return { content: [{ type: "text" as const, text: `Error: Invalid date format. Start=${startTime}, End=${endTime}` }] };
+            if (
+                !isValidDate(startTime as string) ||
+                !isValidDate(endTime as string)
+            ) {
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Error: Invalid date format. Start=${startTime}, End=${endTime}`,
+                        },
+                    ],
+                };
             }
 
             let parsedRecurrence: RecurrenceRule | undefined;
             let resolvedScheduleType: ScheduleType;
             try {
-                const resolved = resolveScheduleType({ explicit: scheduleType, recurrence: recurrenceRule, fallback: 'single' });
+                const resolved = resolveScheduleType({
+                    explicit: scheduleType,
+                    recurrence: recurrenceRule,
+                    fallback: "single",
+                });
                 parsedRecurrence = resolved.parsedRecurrence;
                 resolvedScheduleType = resolved.scheduleType;
             } catch (err: any) {
-                const msg = err?.message?.includes('recurrenceRule') ? 'Invalid recurrenceRule value' : 'Invalid scheduleType value';
+                const msg = err?.message?.includes("recurrenceRule")
+                    ? "Invalid recurrenceRule value"
+                    : "Invalid scheduleType value";
                 return { content: [{ type: "text" as const, text: msg }] };
             }
 
@@ -110,59 +409,95 @@ export const mcpTools: MCPToolsMap = {
             let parentConflicts: any[] = [];
             try {
                 // Fetch existing tasks in the time range
-                const { tasks: existingTasks } = await dbService.getTasksPage(user.id, {
-                    start: startTime,
-                    end: endTime,
-                    limit: 100
-                });
+                const { tasks: existingTasks } = await dbService.getTasksPage(
+                    user.id,
+                    {
+                        start: startTime,
+                        end: endTime,
+                        limit: 100,
+                    },
+                );
 
                 const candidate: TimeLikeTask = {
-                    id: 'new-task',
+                    id: "new-task",
                     startTime: startTime,
-                    endTime: endTime
+                    endTime: endTime,
                 };
 
-                parentConflicts = findConflictingTasks(existingTasks, candidate, { boundaryConflict: !!user.conflictBoundaryInclusive });
+                parentConflicts = findConflictingTasks(
+                    existingTasks,
+                    candidate,
+                    { boundaryConflict: !!user.conflictBoundaryInclusive },
+                );
 
-                if (!allowConflictOverride && parentConflicts.length > 0 && !resolvedRecurrenceRule) {
-                    const conflictNames = parentConflicts.map(t => t.name).join(', ');
+                if (
+                    !allowConflictOverride &&
+                    parentConflicts.length > 0 &&
+                    !resolvedRecurrenceRule
+                ) {
+                    const conflictNames = parentConflicts
+                        .map((t) => t.name)
+                        .join(", ");
                     const message = `Schedule conflict detected with: ${conflictNames}`;
-                    
+
                     // Trigger user log event
-                    await logUserEvent(user.id, 'schedule_conflict', message, {
+                    await logUserEvent(user.id, "schedule_conflict", message, {
                         candidate: { name, startTime, endTime },
-                        conflicts: parentConflicts
+                        conflicts: parentConflicts,
                     });
 
-                    return { content: [{ type: "text" as const, text: `Task creation skipped due to conflict with: ${conflictNames}. A notification has been sent.` }] };
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: `Task creation skipped due to conflict with: ${conflictNames}. A notification has been sent. To force-add despite the conflict, retry with allowConflict: true.`,
+                            },
+                        ],
+                    };
                 }
             } catch (err) {
                 logger.error(`Error checking conflicts: ${err}`);
             }
 
-                const newTask: Task = {
+            const newTask: Task = {
                 id: uuidv4(),
                 name,
                 startTime,
                 endTime,
                 dueDate: endTime,
-                description: description || '',
-                location: location || '',
+                description: description || "",
+                location: location || "",
                 completed: false,
                 pushedToMSTodo: false,
                 scheduleType: resolvedScheduleType,
-                importance: importance || 'normal',
-                isReminderOn: isReminderOn
+                importance: importance || "normal",
+                importanceScore:
+                    typeof importanceScore === "number"
+                        ? importanceScore
+                        : undefined,
+                urgencyScore:
+                    typeof urgencyScore === "number" ? urgencyScore : undefined,
+                isReminderOn: isReminderOn,
             };
             // If caller explicitly sets _internal_approve, proceed to create directly (used by server APIs)
             if ((args as any)._internal_approve === true) {
                 try {
                     // If recurrenceRule provided, attach serialized rule to parent task
-                    if (resolvedRecurrenceRule) newTask.recurrenceRule = JSON.stringify(resolvedRecurrenceRule);
+                    if (resolvedRecurrenceRule)
+                        newTask.recurrenceRule = JSON.stringify(
+                            resolvedRecurrenceRule,
+                        );
 
-                    await dbService.addTask(user.id, newTask, !!user.conflictBoundaryInclusive, effectiveAllowConflict);
-                    await dbService.refreshUserTasksIncremental(user, { addedIds: [newTask.id] });
-                    broadcastTaskChange('created', newTask as Task, user.id);
+                    await dbService.addTask(
+                        user.id,
+                        newTask,
+                        !!user.conflictBoundaryInclusive,
+                        effectiveAllowConflict,
+                    );
+                    await dbService.refreshUserTasksIncremental(user, {
+                        addedIds: [newTask.id],
+                    });
+                    broadcastTaskChange("created", newTask as Task, user.id);
 
                     // Sync to Exchange Calendar if emsClient is available (parent only)
                     if (user.emsClient) {
@@ -171,40 +506,95 @@ export const mcpTools: MCPToolsMap = {
                             body: newTask.description,
                             start: newTask.startTime,
                             end: newTask.endTime,
-                            location: newTask.location || '',
+                            location: newTask.location || "",
                             attendees: [],
                             importance: newTask.importance,
-                            isReminderOn: newTask.isReminderOn
+                            isReminderOn: newTask.isReminderOn,
                         };
                         try {
                             await user.emsClient.createEvent(eventData);
-                            logger.success(`Task synced to Exchange Calendar: ${newTask.name}`);
+                            logger.success(
+                                `Task synced to Exchange Calendar: ${newTask.name}`,
+                            );
                         } catch (exchangeError: any) {
-                            logger.error(`Failed to sync task to Exchange Calendar: ${exchangeError.message}`);
+                            logger.error(
+                                `Failed to sync task to Exchange Calendar: ${exchangeError.message}`,
+                            );
                         }
                     }
 
                     // If recurrence rule is present, generate instances and insert them
                     if (resolvedRecurrenceRule) {
-                        const generated = generateRecurrenceInstances(newTask as Task, resolvedRecurrenceRule as RecurrenceRule);
+                        const generated = generateRecurrenceInstances(
+                            newTask as Task,
+                            resolvedRecurrenceRule as RecurrenceRule,
+                        );
                         const createdIds: string[] = [newTask.id];
                         const instanceConflicts: any[] = [];
-                        let createdChildren = 0, errorChildren = 0;
+                        let createdChildren = 0,
+                            errorChildren = 0;
 
                         for (const inst of generated) {
                             try {
-                                const instConf = findConflictingTasks(user.tasks || [], inst, { boundaryConflict: !!user.conflictBoundaryInclusive });
+                                const instConf = findConflictingTasks(
+                                    user.tasks || [],
+                                    inst,
+                                    {
+                                        boundaryConflict:
+                                            !!user.conflictBoundaryInclusive,
+                                    },
+                                );
                                 if (instConf.length > 0) {
-                                    instanceConflicts.push({ instance: { id: inst.id, startTime: inst.startTime, endTime: inst.endTime }, conflicts: instConf.map(c => ({ id: c.id, name: c.name, startTime: c.startTime, endTime: c.endTime })) });
-                                    await logUserEvent(user.id, 'taskConflict', `Created recurrence instance with conflict ${inst.name}`, { parentId: newTask.id, instanceStart: inst.startTime, instanceEnd: inst.endTime });
+                                    instanceConflicts.push({
+                                        instance: {
+                                            id: inst.id,
+                                            startTime: inst.startTime,
+                                            endTime: inst.endTime,
+                                        },
+                                        conflicts: instConf.map((c) => ({
+                                            id: c.id,
+                                            name: c.name,
+                                            startTime: c.startTime,
+                                            endTime: c.endTime,
+                                        })),
+                                    });
+                                    await logUserEvent(
+                                        user.id,
+                                        "taskConflict",
+                                        `Created recurrence instance with conflict ${inst.name}`,
+                                        {
+                                            parentId: newTask.id,
+                                            instanceStart: inst.startTime,
+                                            instanceEnd: inst.endTime,
+                                        },
+                                    );
                                 } else {
-                                    await logUserEvent(user.id, 'taskCreated', `Created recurrence instance ${inst.name}`, { id: inst.id, parentTaskId: inst.parentTaskId, startTime: inst.startTime, endTime: inst.endTime });
+                                    await logUserEvent(
+                                        user.id,
+                                        "taskCreated",
+                                        `Created recurrence instance ${inst.name}`,
+                                        {
+                                            id: inst.id,
+                                            parentTaskId: inst.parentTaskId,
+                                            startTime: inst.startTime,
+                                            endTime: inst.endTime,
+                                        },
+                                    );
                                 }
 
-                                await dbService.addTask(user.id, inst, !!user.conflictBoundaryInclusive, effectiveAllowConflict);
+                                await dbService.addTask(
+                                    user.id,
+                                    inst,
+                                    !!user.conflictBoundaryInclusive,
+                                    effectiveAllowConflict,
+                                );
                                 createdChildren++;
                                 createdIds.push(inst.id);
-                                broadcastTaskChange('created', inst as Task, user.id);
+                                broadcastTaskChange(
+                                    "created",
+                                    inst as Task,
+                                    user.id,
+                                );
 
                                 // Sync instance to Exchange as separate event if desired
                                 if (user.emsClient) {
@@ -213,56 +603,292 @@ export const mcpTools: MCPToolsMap = {
                                         body: inst.description,
                                         start: inst.startTime,
                                         end: inst.endTime,
-                                        location: inst.location || '',
+                                        location: inst.location || "",
                                         attendees: [],
                                         importance: inst.importance,
-                                        isReminderOn: inst.isReminderOn
+                                        isReminderOn: inst.isReminderOn,
                                     };
-                                    try { await user.emsClient.createEvent(ev); } catch (e) { /* ignore */ }
+                                    try {
+                                        await user.emsClient.createEvent(ev);
+                                    } catch (e) {
+                                        /* ignore */
+                                    }
                                 }
                             } catch (e: any) {
                                 errorChildren++;
-                                await logUserEvent(user.id, 'taskError', `Error creating recurrence instance for ${newTask.name}`, { parentId: newTask.id, error: e?.message });
+                                await logUserEvent(
+                                    user.id,
+                                    "taskError",
+                                    `Error creating recurrence instance for ${newTask.name}`,
+                                    { parentId: newTask.id, error: e?.message },
+                                );
                             }
                         }
 
                         // Refresh cache with all created ids
-                        await dbService.refreshUserTasksIncremental(user, { addedIds: createdIds });
+                        await dbService.refreshUserTasksIncremental(user, {
+                            addedIds: createdIds,
+                        });
 
                         return {
-                            content: [{ type: "text" as const, text: `Task created successfully. ID: ${newTask.id}. Instances created: ${createdChildren}` }],
+                            content: [
+                                {
+                                    type: "text" as const,
+                                    text: `Task created successfully. ID: ${newTask.id}. Instances created: ${createdChildren}`,
+                                },
+                            ],
                             task: newTask,
-                            recurrenceSummary: buildRecurrenceSummary(resolvedRecurrenceRule as RecurrenceRule, createdChildren, 0, errorChildren),
-                            conflictWarning: (parentConflicts.length > 0 || instanceConflicts.length > 0) ? {
-                                message: 'Task created with time conflicts',
-                                conflicts: parentConflicts.map((c: any) => ({ id: c.id, name: c.name, startTime: c.startTime, endTime: c.endTime })),
-                                instanceConflicts
-                            } : undefined
+                            recurrenceSummary: buildRecurrenceSummary(
+                                resolvedRecurrenceRule as RecurrenceRule,
+                                createdChildren,
+                                0,
+                                errorChildren,
+                            ),
+                            conflictWarning:
+                                parentConflicts.length > 0 ||
+                                instanceConflicts.length > 0
+                                    ? {
+                                          message:
+                                              "Task created with time conflicts",
+                                          conflicts: parentConflicts.map(
+                                              (c: any) => ({
+                                                  id: c.id,
+                                                  name: c.name,
+                                                  startTime: c.startTime,
+                                                  endTime: c.endTime,
+                                              }),
+                                          ),
+                                          instanceConflicts,
+                                      }
+                                    : undefined,
                         };
                     }
 
-                    return { 
-                        content: [{ type: "text" as const, text: `Task created successfully. ID: ${newTask.id}` }],
-                        task: newTask 
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: `Task created successfully. ID: ${newTask.id}`,
+                            },
+                        ],
+                        task: newTask,
                     };
                 } catch (error: any) {
-                    return { content: [{ type: "text" as const, text: `Error creating task: ${error.message}` }] };
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: `Error creating task: ${error.message}`,
+                            },
+                        ],
+                    };
                 }
             }
 
             // Otherwise (normal external MCP caller), enqueue request and notify user for approval
             try {
                 const db = dbService;
-                const rawRequest = JSON.stringify({ args, timestamp: toShanghaiISO() });
-                const queueId = await db.addScheduleToQueue(user.id, rawRequest);
+                const rawRequest = JSON.stringify({
+                    args,
+                    timestamp: toShanghaiISO(),
+                });
+                const queueId = await db.addScheduleToQueue(
+                    user.id,
+                    rawRequest,
+                );
                 // Log user event and broadcast to connected clients
-                await logUserEvent(user.id, 'external_schedule_request', `外部请求创建日程: ${name}`, { queueId, name, startTime, endTime });
-                return { content: [{ type: "text" as const, text: `Request queued for user approval. Queue ID: ${queueId}` }], queued: true, queueId };
+                await logUserEvent(
+                    user.id,
+                    "external_schedule_request",
+                    `外部请求创建日程: ${name}`,
+                    { queueId, name, startTime, endTime },
+                );
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Request queued for user approval. Queue ID: ${queueId}`,
+                        },
+                    ],
+                    queued: true,
+                    queueId,
+                };
             } catch (err: any) {
-                logger.error('Failed to enqueue external schedule request:', err);
-                return { content: [{ type: "text" as const, text: `Failed to queue request: ${err?.message || err}` }] };
+                logger.error(
+                    "Failed to enqueue external schedule request:",
+                    err,
+                );
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Failed to queue request: ${err?.message || err}`,
+                        },
+                    ],
+                };
             }
-        }
+        },
+    },
+    add_todo: {
+        name: "add_todo",
+        description:
+            "Add a todo/待办 (no start time). Use when there is only a due date/deadline, or no time at all. " +
+            "If the item has a start time (meeting, timed event), use add_schedule instead.",
+        schema: {
+            name: z
+                .string()
+                .describe("Title of the todo. MUST be provided."),
+            dueDate: z
+                .string()
+                .optional()
+                .describe(
+                    "Optional due date/deadline in ISO 8601 (UTC+8 if unspecified). Do NOT put a start time here.",
+                ),
+            description: z
+                .string()
+                .optional()
+                .describe("Detailed description of the todo."),
+            importance: z
+                .enum(["high", "normal", "low"])
+                .optional()
+                .describe("Importance of the todo (high/normal/low)"),
+            importanceScore: z
+                .number()
+                .min(-1)
+                .max(1)
+                .optional()
+                .describe(
+                    "Eisenhower importance axis in [-1, 1]: positive = more important, negative = less important. Always set based on content.",
+                ),
+            urgencyScore: z
+                .number()
+                .min(-1)
+                .max(1)
+                .optional()
+                .describe(
+                    "Eisenhower urgency axis in [-1, 1]: positive = more urgent, negative = not urgent. Always set based on deadline pressure.",
+                ),
+        },
+        execute: async (
+            args: {
+                name: string;
+                dueDate?: string;
+                description?: string;
+                importance?: "high" | "normal" | "low";
+                importanceScore?: number;
+                urgencyScore?: number;
+                tagIds?: string[];
+                tagNames?: string[];
+                _internal_approve?: boolean;
+            },
+            user: User,
+        ) => {
+            const name = (args.name || "").trim();
+            if (!name) {
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: "Error: Todo name is required.",
+                        },
+                    ],
+                };
+            }
+
+            let dueDate = args.dueDate;
+            if (dueDate) {
+                try {
+                    dueDate = ensureTimezone(dueDate);
+                } catch {
+                    /* keep raw */
+                }
+            }
+
+            if ((args as any)._internal_approve === true) {
+                try {
+                    const todo = await dbService.createTodo(user.id, {
+                        name,
+                        description: args.description || "",
+                        dueDate,
+                        importance: args.importance || "normal",
+                        importanceScore:
+                            typeof args.importanceScore === "number"
+                                ? args.importanceScore
+                                : undefined,
+                        urgencyScore:
+                            typeof args.urgencyScore === "number"
+                                ? args.urgencyScore
+                                : undefined,
+                        tagIds: args.tagIds,
+                        tagNames: args.tagNames,
+                    });
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: `Todo created successfully. ID: ${todo.id}`,
+                            },
+                        ],
+                        todo,
+                    };
+                } catch (error: any) {
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: `Error creating todo: ${error.message}`,
+                            },
+                        ],
+                    };
+                }
+            }
+
+            try {
+                const rawRequest = JSON.stringify({
+                    args: {
+                        name,
+                        dueDate,
+                        description: args.description,
+                        importance: args.importance,
+                        importanceScore: args.importanceScore,
+                        urgencyScore: args.urgencyScore,
+                        tagIds: args.tagIds,
+                        tagNames: args.tagNames,
+                    },
+                    timestamp: toShanghaiISO(),
+                });
+                const queueId = await dbService.addTodoToQueue(
+                    user.id,
+                    rawRequest,
+                );
+                await logUserEvent(
+                    user.id,
+                    "external_todo_request",
+                    `外部请求创建待办: ${name}`,
+                    { queueId, name, dueDate },
+                );
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Todo request queued for user approval. Queue ID: ${queueId}`,
+                        },
+                    ],
+                    queued: true,
+                    queueId,
+                };
+            } catch (err: any) {
+                logger.error("Failed to enqueue external todo request:", err);
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Failed to queue todo request: ${err?.message || err}`,
+                        },
+                    ],
+                };
+            }
+        },
     },
     delete_schedule: {
         name: "delete_schedule",
@@ -274,15 +900,38 @@ export const mcpTools: MCPToolsMap = {
             try {
                 const success = await dbService.deleteTask(args.taskId);
                 if (success) {
-                    await dbService.refreshUserTasksIncremental(user, { deletedIds: [args.taskId] });
-                    return { content: [{ type: "text" as const, text: `Task ${args.taskId} deleted successfully.` }] };
+                    await dbService.refreshUserTasksIncremental(user, {
+                        deletedIds: [args.taskId],
+                    });
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: `Task ${args.taskId} deleted successfully.`,
+                            },
+                        ],
+                    };
                 } else {
-                    return { content: [{ type: "text" as const, text: `Task ${args.taskId} not found or could not be deleted.` }] };
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: `Task ${args.taskId} not found or could not be deleted.`,
+                            },
+                        ],
+                    };
                 }
             } catch (error: any) {
-                return { content: [{ type: "text" as const, text: `Error deleting task: ${error.message}` }] };
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Error deleting task: ${error.message}`,
+                        },
+                    ],
+                };
             }
-        }
+        },
     },
     update_schedule: {
         name: "update_schedule",
@@ -290,32 +939,85 @@ export const mcpTools: MCPToolsMap = {
         schema: {
             taskId: z.string().describe("The ID of the task to update"),
             name: z.string().optional().describe("New title of the task"),
-            startTime: z.string().optional().describe("New start time in ISO 8601 format"),
-            endTime: z.string().optional().describe("New end time in ISO 8601 format"),
-            description: z.string().optional().describe("New description of the task"),
-            completed: z.boolean().optional().describe("Whether the task is completed"),
+            startTime: z
+                .string()
+                .optional()
+                .describe("New start time in ISO 8601 format"),
+            endTime: z
+                .string()
+                .optional()
+                .describe("New end time in ISO 8601 format"),
+            description: z
+                .string()
+                .optional()
+                .describe("New description of the task"),
+            completed: z
+                .boolean()
+                .optional()
+                .describe("Whether the task is completed"),
         },
-        execute: async (args: { taskId: string, name?: string, startTime?: string, endTime?: string, description?: string, completed?: boolean }, user: User) => {
+        execute: async (
+            args: {
+                taskId: string;
+                name?: string;
+                startTime?: string;
+                endTime?: string;
+                description?: string;
+                completed?: boolean;
+            },
+            user: User,
+        ) => {
             try {
                 const updates: any = {};
                 if (args.name !== undefined) updates.name = args.name;
-                if (args.startTime !== undefined) updates.startTime = args.startTime;
+                if (args.startTime !== undefined)
+                    updates.startTime = args.startTime;
                 if (args.endTime !== undefined) updates.endTime = args.endTime;
-                if (args.description !== undefined) updates.description = args.description;
-                if (args.completed !== undefined) updates.completed = args.completed;
+                if (args.description !== undefined)
+                    updates.description = args.description;
+                if (args.completed !== undefined)
+                    updates.completed = args.completed;
 
                 if (Object.keys(updates).length === 0) {
-                    return { content: [{ type: "text" as const, text: "No updates provided." }] };
+                    return {
+                        content: [
+                            {
+                                type: "text" as const,
+                                text: "No updates provided.",
+                            },
+                        ],
+                    };
                 }
 
-                const updatedTask = await dbService.patchTask(user.id, args.taskId, updates, !!user.conflictBoundaryInclusive);
-                await dbService.refreshUserTasksIncremental(user, { updatedIds: [args.taskId] });
-                
-                return { content: [{ type: "text" as const, text: `Task ${args.taskId} updated successfully.` }] };
+                const updatedTask = await dbService.patchTask(
+                    user.id,
+                    args.taskId,
+                    updates,
+                    !!user.conflictBoundaryInclusive,
+                );
+                await dbService.refreshUserTasksIncremental(user, {
+                    updatedIds: [args.taskId],
+                });
+
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Task ${args.taskId} updated successfully.`,
+                        },
+                    ],
+                };
             } catch (error: any) {
-                return { content: [{ type: "text" as const, text: `Error updating task: ${error.message}` }] };
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Error updating task: ${error.message}`,
+                        },
+                    ],
+                };
             }
-        }
+        },
     },
     get_schedule: {
         name: "get_schedule",
@@ -324,133 +1026,309 @@ export const mcpTools: MCPToolsMap = {
             startDate: z.string().describe("Start date in ISO 8601 format"),
             endDate: z.string().describe("End date in ISO 8601 format"),
         },
-        execute: async (args: { startDate: string, endDate: string }, user: User) => {
+        execute: async (
+            args: { startDate: string; endDate: string },
+            user: User,
+        ) => {
             try {
                 const { tasks } = await dbService.getTasksPage(user.id, {
                     start: args.startDate,
                     end: args.endDate,
-                    limit: 100
+                    limit: 100,
                 });
-                return { content: [{ type: "text" as const, text: JSON.stringify(tasks, null, 2) }] };
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: JSON.stringify(tasks, null, 2),
+                        },
+                    ],
+                };
             } catch (error: any) {
-                return { content: [{ type: "text" as const, text: `Error fetching schedule: ${error.message}` }] };
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Error fetching schedule: ${error.message}`,
+                        },
+                    ],
+                };
             }
-        }
+        },
     },
     get_server_time: {
         name: "get_server_time",
-        description: "Get the current server time. IMPORTANT:You MUST use this tool to get the current time before scheduling any time related tasks to ensure accurate time references IF there are no time source in the context.",
+        description:
+            "Get the current server time. Use this only if the time provided in context is stale or you need a fresh reference.",
         schema: {},
         execute: async (args: any, user: User) => {
-            return { content: [{ type: "text" as const, text: toShanghaiISO() }] };
-        }
+            return {
+                content: [{ type: "text" as const, text: toShanghaiISO() }],
+            };
+        },
     },
     search_tasks: {
         name: "search_tasks",
-        description: "Search for tasks with various filters",
+        description:
+            "Search for tasks with various filters. Supports quadrant filtering for Eisenhower Matrix based queries.",
         schema: {
-            q: z.string().optional().describe("Fuzzy search query for task name or description"),
-            completed: z.boolean().optional().describe("Filter by completion status"),
-            startDate: z.string().optional().describe("Filter tasks ending after this date (ISO 8601)"),
-            endDate: z.string().optional().describe("Filter tasks starting before this date (ISO 8601)"),
-            limit: z.number().optional().describe("Max number of results (default 50)"),
-            offset: z.number().optional().describe("Pagination offset (default 0)"),
-            sortBy: z.enum(["startTime", "dueDate", "name", "endTime"]).optional().describe("Field to sort by"),
-            order: z.enum(["asc", "desc"]).optional().describe("Sort order")
+            q: z
+                .string()
+                .optional()
+                .describe("Fuzzy search query for task name or description"),
+            completed: z
+                .boolean()
+                .optional()
+                .describe("Filter by completion status"),
+            startDate: z
+                .string()
+                .optional()
+                .describe("Filter tasks ending after this date (ISO 8601)"),
+            endDate: z
+                .string()
+                .optional()
+                .describe("Filter tasks starting before this date (ISO 8601)"),
+            quadrant: z
+                .enum(["q1", "q2", "q3", "q4"])
+                .optional()
+                .describe(
+                    "Filter by Eisenhower quadrant: q1=urgent+important, q2=important, q3=urgent, q4=neither",
+                ),
+            limit: z
+                .number()
+                .optional()
+                .describe("Max number of results (default 50)"),
+            offset: z
+                .number()
+                .optional()
+                .describe("Pagination offset (default 0)"),
+            sortBy: z
+                .enum(["startTime", "dueDate", "name", "endTime"])
+                .optional()
+                .describe("Field to sort by"),
+            order: z.enum(["asc", "desc"]).optional().describe("Sort order"),
         },
-        execute: async (args: { q?: string, completed?: boolean, startDate?: string, endDate?: string, limit?: number, offset?: number, sortBy?: string, order?: 'asc' | 'desc' }, user: User) => {
+        execute: async (
+            args: {
+                q?: string;
+                completed?: boolean;
+                startDate?: string;
+                endDate?: string;
+                quadrant?: string;
+                limit?: number;
+                offset?: number;
+                sortBy?: string;
+                order?: "asc" | "desc";
+            },
+            user: User,
+        ) => {
             try {
-                const { tasks, total } = await dbService.getTasksPage(user.id, {
-                    q: args.q,
-                    completed: args.completed,
-                    start: args.startDate,
-                    end: args.endDate,
-                    limit: args.limit,
-                    offset: args.offset,
-                    sortBy: args.sortBy,
-                    order: args.order
-                });
-                return { content: [{ type: "text" as const, text: JSON.stringify({ tasks, total }, null, 2) }] };
+                const allTasks = await dbService.getTasksByUserId(user.id);
+                let filtered = allTasks;
+
+                if (args.q) {
+                    const q = args.q.toLowerCase();
+                    filtered = filtered.filter(
+                        (t) =>
+                            t.name.toLowerCase().includes(q) ||
+                            (t.description || "").toLowerCase().includes(q),
+                    );
+                }
+                if (typeof args.completed === "boolean") {
+                    filtered = filtered.filter(
+                        (t) => t.completed === args.completed,
+                    );
+                }
+                if (args.startDate) {
+                    filtered = filtered.filter(
+                        (t) => t.endTime >= args.startDate!,
+                    );
+                }
+                if (args.endDate) {
+                    filtered = filtered.filter(
+                        (t) => t.startTime <= args.endDate!,
+                    );
+                }
+                if (args.quadrant) {
+                    filtered = filtered.filter(
+                        (t) => t.quadrant === args.quadrant,
+                    );
+                }
+
+                const total = filtered.length;
+                const limit = args.limit || 50;
+                const offset = args.offset || 0;
+                const tasks = filtered.slice(offset, offset + limit);
+
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: JSON.stringify({ tasks, total }, null, 2),
+                        },
+                    ],
+                };
             } catch (error: any) {
-                return { content: [{ type: "text" as const, text: `Error searching tasks: ${error.message}` }] };
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Error searching tasks: ${error.message}`,
+                        },
+                    ],
+                };
             }
-        }
+        },
+    },
+    get_quadrant_summary: {
+        name: "get_quadrant_summary",
+        description:
+            "Get an Eisenhower Matrix summary showing how many tasks are in each quadrant, optionally filtered by date range. Useful for productivity analysis.",
+        schema: {
+            startDate: z
+                .string()
+                .optional()
+                .describe("Filter tasks ending after this date (ISO 8601)"),
+            endDate: z
+                .string()
+                .optional()
+                .describe("Filter tasks starting before this date (ISO 8601)"),
+        },
+        execute: async (
+            args: { startDate?: string; endDate?: string },
+            user: User,
+        ) => {
+            try {
+                const allTasks = await dbService.getTasksByUserId(user.id);
+                let tasks = allTasks;
+                if (args.startDate)
+                    tasks = tasks.filter((t) => t.endTime >= args.startDate!);
+                if (args.endDate)
+                    tasks = tasks.filter((t) => t.startTime <= args.endDate!);
+
+                const summary = {
+                    total: tasks.length,
+                    q1: {
+                        count: tasks.filter((t) => t.quadrant === "q1").length,
+                        label: "重要且紧急",
+                    },
+                    q2: {
+                        count: tasks.filter((t) => t.quadrant === "q2").length,
+                        label: "重要不紧急",
+                    },
+                    q3: {
+                        count: tasks.filter((t) => t.quadrant === "q3").length,
+                        label: "不重要但紧急",
+                    },
+                    q4: {
+                        count: tasks.filter((t) => t.quadrant === "q4").length,
+                        label: "不重要不紧急",
+                    },
+                    unclassified: {
+                        count: tasks.filter((t) => !t.quadrant).length,
+                        label: "未分类",
+                    },
+                };
+
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: JSON.stringify(summary, null, 2),
+                        },
+                    ],
+                };
+            } catch (error: any) {
+                return {
+                    content: [
+                        {
+                            type: "text" as const,
+                            text: `Error getting quadrant summary: ${error.message}`,
+                        },
+                    ],
+                };
+            }
+        },
     },
 };
 
-export function initializeMcpRoutes(app: express.Application, authenticateToken: any) {
-    
+export function initializeMcpRoutes(
+    app: express.Application,
+    authenticateToken: any,
+) {
     // SSE Endpoint to start a session
-    app.get('/api/mcp/sse', authenticateToken, async (req: any, res: Response) => {
-        const user = req.user as User;
-        if (!user) {
-            res.status(401).send('User not found');
-            return;
-        }
+    app.get(
+        "/api/mcp/sse",
+        authenticateToken,
+        async (req: any, res: Response) => {
+            const user = req.user as User;
+            if (!user) {
+                res.status(401).send("User not found");
+                return;
+            }
 
-        logger.info(`Starting MCP session for user ${user.id}`);
+            logger.info(`Starting MCP session for user ${user.id}`);
 
-        const transport = new SSEServerTransport(
-            '/api/mcp/messages', 
-            res
-        );
+            const transport = new SSEServerTransport("/api/mcp/messages", res);
 
-        const server = new McpServer({
-            name: "TimeManager MCP",
-            version: "1.0.0"
-        });
+            const server = new McpServer({
+                name: "TimeManager MCP",
+                version: "1.0.0",
+            });
 
-        // Register tools from mcpTools definition
-        for (const key of Object.keys(mcpTools)) {
-            const tool = mcpTools[key as keyof typeof mcpTools];
-            server.tool(
+            // Register tools from mcpTools definition
+            for (const key of Object.keys(mcpTools)) {
+                const tool = mcpTools[key as keyof typeof mcpTools];
+                server.tool(
                     tool.name,
-                    tool.description ?? '',
+                    tool.description ?? "",
                     tool.schema ?? {},
                     async (args: any) => {
                         return await tool.execute(args, user);
-                    }
+                    },
                 );
-        }
+            }
 
-        await server.connect(transport);
-        
-        // Store transport by sessionId (SSEServerTransport generates a sessionId)
-        // We need to access the sessionId from the transport. 
-        // Note: The SDK's SSEServerTransport might not expose sessionId publicly in all versions, 
-        // but usually it's available or we can infer it from the URL it sends to the client.
-        // Actually, the transport handles the response and keeps it open.
-        // We need to intercept the session ID creation or rely on the client sending it back.
-        // The SSEServerTransport sends an 'endpoint' event with the URI to post to.
-        // That URI usually includes the session ID.
-        
-        // For this implementation, we'll assume the transport manages its own session mapping if we use the handlePostMessage correctly.
-        // Wait, `handlePostMessage` is a method on the transport instance.
-        // So we need to map `sessionId` -> `transport instance`.
-        // But we don't know the sessionId until the transport generates it.
-        // Let's look at how we can capture it.
-        // The `SSEServerTransport` writes to `res`.
-        // We can't easily intercept the session ID unless we subclass or if it's a property.
-        
-        // Workaround: We'll use a custom session ID generation if the SDK allows, or we'll just store it if we can read it.
-        // If `transport.sessionId` exists, we use it.
-        
-        const sessionId = (transport as unknown as { sessionId?: string }).sessionId;
-        if (sessionId) {
-            transports.set(sessionId, transport);
-            
-            // Clean up on close
-            res.on('close', () => {
-                transports.delete(sessionId);
-                logger.info(`MCP session ${sessionId} closed`);
-            });
-        } else {
-            logger.warn("Could not capture MCP session ID");
-        }
-    });
+            await server.connect(transport);
+
+            // Store transport by sessionId (SSEServerTransport generates a sessionId)
+            // We need to access the sessionId from the transport.
+            // Note: The SDK's SSEServerTransport might not expose sessionId publicly in all versions,
+            // but usually it's available or we can infer it from the URL it sends to the client.
+            // Actually, the transport handles the response and keeps it open.
+            // We need to intercept the session ID creation or rely on the client sending it back.
+            // The SSEServerTransport sends an 'endpoint' event with the URI to post to.
+            // That URI usually includes the session ID.
+
+            // For this implementation, we'll assume the transport manages its own session mapping if we use the handlePostMessage correctly.
+            // Wait, `handlePostMessage` is a method on the transport instance.
+            // So we need to map `sessionId` -> `transport instance`.
+            // But we don't know the sessionId until the transport generates it.
+            // Let's look at how we can capture it.
+            // The `SSEServerTransport` writes to `res`.
+            // We can't easily intercept the session ID unless we subclass or if it's a property.
+
+            // Workaround: We'll use a custom session ID generation if the SDK allows, or we'll just store it if we can read it.
+            // If `transport.sessionId` exists, we use it.
+
+            const sessionId = (transport as unknown as { sessionId?: string })
+                .sessionId;
+            if (sessionId) {
+                transports.set(sessionId, transport);
+
+                // Clean up on close
+                res.on("close", () => {
+                    transports.delete(sessionId);
+                    logger.info(`MCP session ${sessionId} closed`);
+                });
+            } else {
+                logger.warn("Could not capture MCP session ID");
+            }
+        },
+    );
 
     // Endpoint to handle client messages (POST)
-    app.post('/api/mcp/messages', async (req: Request, res: Response) => {
+    app.post("/api/mcp/messages", async (req: Request, res: Response) => {
         const sessionId = req.query.sessionId as string;
         if (!sessionId) {
             res.status(400).send("Missing sessionId");
@@ -474,57 +1352,62 @@ export function getOpenAITools() {
         const parameters: any = {
             type: "object",
             properties: {},
-            required: []
+            required: [],
         };
-        
+
         // Helper to extract Zod schema details
         // Note: This is a simplified converter for the specific Zod schemas used here.
         // It may not cover all Zod features.
         // Handle both ZodObject (has .shape) and plain object definitions
         // tool.schema may be a Zod object with `.shape` or a plain object; handle both
-        const schemaLike = tool.schema as { shape?: Record<string, any> } | Record<string, any>;
-        const shape = (schemaLike && (schemaLike as any).shape) ? (schemaLike as any).shape : tool.schema;
-        
+        const schemaLike = tool.schema as
+            | { shape?: Record<string, any> }
+            | Record<string, any>;
+        const shape =
+            schemaLike && (schemaLike as any).shape
+                ? (schemaLike as any).shape
+                : tool.schema;
+
         if (shape) {
             for (const paramName in shape) {
                 const zodSchema = shape[paramName];
                 let schema = zodSchema;
                 let isOptional = false;
-                
+
                 // Handle ZodOptional
-                if (schema._def.typeName === 'ZodOptional') {
+                if (schema._def.typeName === "ZodOptional") {
                     isOptional = true;
                     schema = schema._def.innerType;
                 }
-                
+
                 const prop: any = {};
                 if (schema.description) prop.description = schema.description;
-                
-                if (schema._def.typeName === 'ZodString') {
+
+                if (schema._def.typeName === "ZodString") {
                     prop.type = "string";
-                } else if (schema._def.typeName === 'ZodNumber') {
+                } else if (schema._def.typeName === "ZodNumber") {
                     prop.type = "number";
-                } else if (schema._def.typeName === 'ZodBoolean') {
+                } else if (schema._def.typeName === "ZodBoolean") {
                     prop.type = "boolean";
-                } else if (schema._def.typeName === 'ZodEnum') {
+                } else if (schema._def.typeName === "ZodEnum") {
                     prop.type = "string";
                     prop.enum = schema._def.values;
                 }
-                
+
                 parameters.properties[paramName] = prop;
                 if (!isOptional) {
                     parameters.required.push(paramName);
                 }
             }
         }
-        
+
         tools.push({
             type: "function",
             function: {
                 name: tool.name,
                 description: tool.description,
-                parameters: parameters
-            }
+                parameters: parameters,
+            },
         });
     }
     logger.data(`Generated OpenAI Tools: ${JSON.stringify(tools, null, 2)}`);

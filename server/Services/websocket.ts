@@ -182,7 +182,7 @@ export function broadcastUserLog(
         time: string;
         type: string;
         message: string;
-        payload?: any;
+        payload?: unknown;
     },
 ) {
     if (!wss) return;

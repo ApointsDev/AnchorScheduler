@@ -1,0 +1,56 @@
+/* ── Figma 风格选项卡（原 iOS 风格 → 扁平化） ──────────── */
+
+.ios-tab-bar {
+    position: relative;
+    display: inline-flex;
+    gap: 2px;
+    padding: 4px;
+    background: var(--color-surface-secondary);
+    border-radius: 12px;
+    z-index: 100;
+}
+
+/* 悬浮模式：贴底居中 */
+.ios-tab-bar--floating {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* 滑动指示器 - 支持任意数量的选项 */
+.ios-tab-bar-slider {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 4px;
+    background: var(--color-surface-card);
+    border-radius: 10px;
+    transition: transform var(--duration-fast) cubic-bezier(0.25, 0.1, 0.25, 1);
+    z-index: 0;
+}
+
+.ios-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 10px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-tertiary);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: color var(--duration-fast);
+    white-space: nowrap;
+    position: relative;
+    z-index: 1;
+    flex: 1;
+}
+
+.ios-tab-active {
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
+}

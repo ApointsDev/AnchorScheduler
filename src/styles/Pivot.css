@@ -1,0 +1,341 @@
+/* ── 日程透视表 ──────────────────────────────────────────────── */
+
+.pivot-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: var(--space-3);
+}
+
+/* ── 周导航栏 ──────────────────────────────────────────────── */
+.pivot-week-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+.pivot-week-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text);
+    min-width: 180px;
+    text-align: center;
+}
+
+/* ── 表格容器 ───────────────────────────────────────────────── */
+.pivot-table-wrapper {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+}
+
+.pivot-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    table-layout: fixed;
+    min-width: 760px;
+}
+
+/* ── 表头 ──────────────────────────────────────────────────── */
+.pivot-corner-cell {
+    width: 80px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.72rem;
+    color: var(--color-text-medium);
+    background: var(--color-bg-subtle, var(--color-neutral-50));
+    padding: 10px var(--space-2);
+    border-bottom: 2px solid var(--color-border);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.pivot-col-header {
+    text-align: center;
+    padding: var(--space-2) 6px 6px;
+    border-bottom: 2px solid var(--color-border);
+    background: var(--color-bg-subtle, var(--color-neutral-50));
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.pivot-col-header .pivot-col-label {
+    display: block;
+    font-weight: 700;
+    font-size: 0.8rem;
+}
+
+.pivot-col-header .pivot-col-hint {
+    display: block;
+    font-size: 0.62rem;
+    color: var(--color-text-medium);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+}
+
+/* 象限列颜色 */
+.pivot-col-header.q1 {
+    border-top: 3px solid var(--qd-border-accent-q1);
+}
+.pivot-col-header.q2 {
+    border-top: 3px solid var(--qd-border-accent-q2);
+}
+.pivot-col-header.q3 {
+    border-top: 3px solid var(--qd-border-accent-q3);
+}
+.pivot-col-header.q4 {
+    border-top: 3px solid var(--qd-border-accent-q4);
+}
+.pivot-col-header.pivot-col-total {
+    border-top: 3px solid var(--color-text-medium);
+}
+
+/* ── 行 ────────────────────────────────────────────────────── */
+.pivot-row {
+    transition: background var(--duration-fast);
+}
+
+.pivot-row:hover {
+    background: var(--color-bg-hover, rgba(0, 0, 0, 0.02));
+}
+
+.pivot-row-today {
+    background: rgba(79, 70, 229, 0.04);
+}
+
+.pivot-row-today:hover {
+    background: rgba(79, 70, 229, 0.07);
+}
+
+.pivot-row-summary {
+    background: var(--color-bg-subtle, var(--color-neutral-50));
+    font-weight: 600;
+    border-top: 2px solid var(--color-border);
+}
+
+.pivot-row-header {
+    text-align: center;
+    padding: 10px 6px;
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    position: sticky;
+    left: 0;
+    background: inherit;
+    z-index: 1;
+}
+
+.pivot-day-name {
+    display: block;
+    font-weight: 600;
+    font-size: 0.78rem;
+    color: var(--color-text);
+}
+
+.pivot-day-date {
+    display: block;
+    font-size: 0.68rem;
+    color: var(--color-text-medium);
+    margin-top: 1px;
+}
+
+.pivot-row-today .pivot-day-name {
+    color: var(--color-primary);
+}
+
+/* ── 单元格 ────────────────────────────────────────────────── */
+.pivot-cell {
+    vertical-align: top;
+    padding: 6px var(--space-1);
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    min-height: 60px;
+    transition: background var(--duration-fast);
+}
+
+.pivot-cell.has-tasks {
+    min-width: 0;
+}
+
+.pivot-cell-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-light, var(--color-neutral-400));
+    font-size: 0.75rem;
+    min-height: 40px;
+}
+
+.pivot-cell-summary {
+    text-align: center;
+    vertical-align: middle !important;
+}
+
+.pivot-cell-total {
+    text-align: center;
+    vertical-align: middle !important;
+}
+
+/* ── 任务卡片 ──────────────────────────────────────────────── */
+.pivot-cell-tasks {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.pivot-task-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 3px 6px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.72rem;
+    transition:
+        background 0.12s,
+        transform 0.1s;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.pivot-task-chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 按象限着色 */
+.pivot-cell.q1 .pivot-task-chip {
+    background: rgba(229, 115, 115, 0.12);
+}
+.pivot-cell.q2 .pivot-task-chip {
+    background: rgba(100, 181, 246, 0.12);
+}
+.pivot-cell.q3 .pivot-task-chip {
+    background: rgba(255, 183, 77, 0.12);
+}
+.pivot-cell.q4 .pivot-task-chip {
+    background: rgba(129, 199, 132, 0.12);
+}
+
+.pivot-cell.q1 .pivot-task-chip:hover {
+    background: rgba(229, 115, 115, 0.22);
+}
+.pivot-cell.q2 .pivot-task-chip:hover {
+    background: rgba(100, 181, 246, 0.22);
+}
+.pivot-cell.q3 .pivot-task-chip:hover {
+    background: rgba(255, 183, 77, 0.22);
+}
+.pivot-cell.q4 .pivot-task-chip:hover {
+    background: rgba(129, 199, 132, 0.22);
+}
+
+.pivot-task-chip.completed {
+    opacity: 0.5;
+    text-decoration: line-through;
+}
+
+.pivot-task-time {
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--color-text-medium);
+    font-family: "SF Mono", "Consolas", "Monaco", monospace;
+    flex-shrink: 0;
+}
+
+.pivot-task-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── 合计徽章 ──────────────────────────────────────────────── */
+.pivot-total-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 11px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: var(--color-neutral-100, var(--qd-border-panel));
+    color: var(--color-text);
+}
+
+.pivot-row-summary .pivot-total-badge {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+/* ── 空状态 ────────────────────────────────────────────────── */
+.pivot-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-10) 0;
+    color: var(--color-text-light, var(--qd-empty-text));
+    font-size: 0.85rem;
+}
+
+/* ── 响应式 ────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+.pivot-table-wrapper {
+    border-radius: var(--radius-sm);
+    }
+
+    .pivot-corner-cell {
+        width: 56px;
+        font-size: 0.68rem;
+        padding: var(--space-2) var(--space-1);
+    }
+
+    .pivot-col-header {
+        padding: 6px 3px var(--space-1);
+    }
+
+    .pivot-col-header .pivot-col-label {
+        font-size: 0.7rem;
+    }
+
+    .pivot-col-header .pivot-col-hint {
+        display: none;
+    }
+
+    .pivot-row-header {
+        padding: var(--space-2) var(--space-1);
+    }
+
+    .pivot-day-name {
+        font-size: 0.7rem;
+    }
+
+    .pivot-day-date {
+        font-size: 0.62rem;
+    }
+
+    .pivot-cell-tasks {
+        max-height: 80px;
+    }
+
+    .pivot-task-chip {
+        font-size: 0.68rem;
+        padding: 2px var(--space-1);
+    }
+
+    .pivot-week-label {
+        font-size: 0.82rem;
+        min-width: auto;
+        flex: 1;
+    }
+}

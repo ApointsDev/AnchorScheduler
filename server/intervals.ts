@@ -20,6 +20,11 @@ import { ensureCafTokenValid, createCafConfig } from "./Services/cafAuth";
 import { processEmailWithLLM } from "./Services/emailProcessor";
 import type { CafConfig } from "./Services/cafAuth";
 import type { User } from "./types/models";
+import {
+    isChaoxingSyncing,
+    syncChaoxingUser,
+} from "./Services/chaoxing/syncService";
+import { isDue } from "./Services/chaoxing/scheduleNext";
 
 // 注意：为避免循环依赖，这里本地定义 Task 类型签名（与 types/models.ts 一致）
 interface Task {
@@ -257,7 +262,7 @@ async function startImapForUser(
         const validToken = await ensureCafTokenForImap(cafConfig, user);
         if (!validToken) {
             logger.warn(
-                `CAF token not available for ${user.id}, skipping IMAP`,
+                `CAF token not available for ${user.id} (expired or refresh failed), skipping IMAP`,
             );
             return;
         }
@@ -292,9 +297,36 @@ async function startImapForUser(
         })
         .catch(async (err: any) => {
             const errorMsg = err.message || "未知错误";
+            const isAuthError =
+                /auth|login|credential|unauthorized|token|expired|AUTHENTICATIONFAILED/i.test(
+                    errorMsg,
+                );
             logger.error(
                 `Failed to start IMAP IDLE for user ${user.id}: ${errorMsg}`,
             );
+
+            user.imapClient = undefined;
+
+            // 认证相关错误：token 可能已过期，清除 CAF token 让用户重新登录
+            if (isAuthError && user.CAFAccessToken) {
+                logger.warn(
+                    `IMAP auth error for ${user.id}, clearing CAF tokens`,
+                );
+                user.CAFAccessToken = undefined;
+                user.CAFRefreshToken = undefined;
+                user.CAFTokenExpiresAt = undefined;
+                imapRetryCount.delete(user.id);
+                try {
+                    await dbService.updateUser(user);
+                } catch {
+                    /* ignore */
+                }
+                broadcastSmtpError(
+                    user.id,
+                    `CAF 认证已过期，IMAP 连接失败。请重新登录以刷新认证令牌。`,
+                );
+                return;
+            }
 
             const retry = imapRetryCount.get(user.id) || {
                 count: 0,
@@ -349,11 +381,29 @@ async function startImapForUser(
 // ── IMAP 邮件处理（统一管道）────────────────────────────
 
 async function processImapEmail(user: User, fullEmail: any): Promise<void> {
+    // 防止重复 AI 处理：检查该邮件是否已被处理过
+    const emailId = fullEmail.id || fullEmail.uid;
+    if (emailId) {
+        const alreadyProcessed = await dbService.isEmailAiProcessed(
+            user.id,
+            String(emailId),
+            "imap",
+        );
+        if (alreadyProcessed) {
+            logger.info(
+                `IMAP 邮件 ${emailId} (${fullEmail.subject}) 已 AI 处理过，跳过`,
+            );
+            return;
+        }
+    }
+
     logger.info(`IMAP IDLE 收到新邮件: ${fullEmail.subject}, 交由 LLM 处理`);
 
+    let aiSuccess = false;
     if (user.emsClient) {
         try {
             await user.emsClient.autoProcessNewEmail(fullEmail);
+            aiSuccess = true;
         } catch (err: any) {
             logger.error(
                 `IDLE 邮件 LLM 处理失败: ${err.message || "未知错误"}`,
@@ -362,10 +412,24 @@ async function processImapEmail(user: User, fullEmail: any): Promise<void> {
     } else {
         try {
             await processEmailWithLLM(user, fullEmail, "imap");
+            aiSuccess = true;
         } catch (err: any) {
             logger.error(
                 `IMAP 邮件 LLM 处理失败: ${err.message || "未知错误"}`,
             );
+        }
+    }
+
+    // 标记 AI 已处理（成功后持久化，防止重启后重复处理）
+    if (aiSuccess && emailId) {
+        try {
+            await dbService.markEmailAiProcessed(
+                user.id,
+                String(emailId),
+                "imap",
+            );
+        } catch (err: any) {
+            logger.error(`标记 AI 已处理失败: ${err.message || "未知错误"}`);
         }
     }
 
@@ -447,18 +511,15 @@ async function pushTasksToMsTodo(user: User): Promise<void> {
                 );
                 try {
                     user.MStoken = "";
-                    user.MSbinded = false;
+                    // 不清除 MSbinded —— 用户已授权，只是 token 过期
                     await dbService.updateUser(user);
                     await logUserEvent(
                         user.id,
                         "msGraphPaused",
-                        "Cleared MS token and paused MS Graph operations due to 401 Unauthorized",
-                    );
-                    logger.warn(
-                        `Cleared MStoken and set MSbinded=false for user ${user.id}`,
+                        "Cleared MS token due to 401 Unauthorized",
                     );
                 } catch (e) {
-                    logger.error("Failed to persist MSbinded paused state:", e);
+                    logger.error("Failed to clear MStoken:", e);
                 }
             } else if (error.response?.status === 403) {
                 logger.error(`MS Graph API 403 Forbidden for task ${task.id}`);
@@ -538,13 +599,58 @@ export function startIntervals(
                     /* handled internally */
                 }
             }
+
+            // 学习通自动同步（有开始时间→日程，无→待办）
+            if (
+                user.ChaoxingBinded &&
+                user.ChaoxingEnabled !== false &&
+                user.ChaoxingUsername &&
+                user.ChaoxingPassword &&
+                !isChaoxingSyncing(user.id) &&
+                isDue(user.ChaoxingNextSyncAt)
+            ) {
+                void syncChaoxingUser(user).catch((e) =>
+                    logger.warn(
+                        `Chaoxing auto-sync failed for ${user.id}:`,
+                        e,
+                    ),
+                );
+            }
         }
         logger.debug("Checked all users for Ebridge status");
     }, 20000);
 
+    // 拒绝缓冲池过期清理（每小时）
+    const rejectionCleanup = setInterval(async () => {
+        try {
+            const n = await dbService.cleanupExpiredRejections();
+            if (n > 0) {
+                logger.info(
+                    `Rejection buffer: cleaned ${n} expired record(s)`,
+                );
+            }
+        } catch (e) {
+            logger.warn("Rejection buffer cleanup failed:", e);
+        }
+    }, 60 * 60 * 1000);
+
+    // 自动归档（ARC-001，每日）：扫描连续 6 个自然月无活动的分组并归档
+    const autoArchive = setInterval(async () => {
+        try {
+            const n = await dbService.autoArchiveTags();
+            if (n > 0) {
+                logger.info(`Auto-archive: archived ${n} inactive tag(s)`);
+            }
+        } catch (e) {
+            logger.warn("Auto-archive job failed:", e);
+        }
+    }, 24 * 60 * 60 * 1000);
+
     return {
         stop() {
             clearInterval(interval1);
+            clearInterval(rejectionCleanup);
+            clearInterval(autoArchive);
         },
     };
 }

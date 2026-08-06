@@ -1,0 +1,383 @@
+/* ── 四象限视图 · 便签风格 ────────────────────────────────────────
+   Quadrant design tokens (--qd-*) are defined in tokens.css */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.quadrant-view-wrapper {
+    flex: 1;
+    overflow: hidden;
+    padding: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 四象限网格 */
+.quadrant-board {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: var(--space-3);
+    flex: 1;
+    min-height: 0;
+    padding: var(--space-1) 0;
+}
+
+/* 单个象限区域 —— 毛毡板背景 */
+.quadrant-panel {
+    background: var(--qd-bg-panel);
+    border: 1px solid var(--qd-border-panel);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 象限标题行 */
+.quadrant-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 2px dashed var(--qd-border-dashed);
+}
+
+.quadrant-panel-label {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--qd-text-heading);
+    letter-spacing: 0.02em;
+}
+
+.quadrant-panel-hint {
+    font-size: 0.7rem;
+    color: var(--qd-text-muted);
+    margin-top: 1px;
+}
+
+.quadrant-panel-count {
+    font-size: 0.75rem;
+    color: var(--qd-text-muted);
+    background: var(--qd-border-panel);
+    border-radius: var(--radius-sm);
+    padding: 2px 7px;
+}
+
+/* 便签容器 —— 弹性布局，允许便签自然排列 */
+.quadrant-notes {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: var(--space-2);
+    padding: 2px 0;
+}
+
+/* ================================================================
+   便签卡片 —— 核心元素
+   ================================================================ */
+
+.note {
+    /* 直角风格（微小圆角仅用于防锯齿） */
+    border-radius: 2px;
+    padding: 10px 11px 9px;
+    width: calc(50% - 4px);
+    min-width: 130px;
+    max-width: 100%;
+    position: relative;
+    cursor: pointer;
+    transition:
+        transform var(--duration-fast),
+        box-shadow var(--duration-fast);
+
+    /* 便签阴影 —— 模拟纸片浮在毛毡板上 */
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.12),
+        0 1px 2px rgba(0, 0, 0, 0.08);
+
+    /* 默认底色 */
+    background: var(--qd-bg-note-default);
+}
+
+.note:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.15),
+        0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 便签顶部图钉装饰 */
+.note::before {
+    content: "";
+    position: absolute;
+    top: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: radial-gradient(
+        circle at 40% 35%,
+        var(--qd-pin-light),
+        var(--qd-pin-dark)
+    );
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    z-index: 1;
+}
+
+/* ── 四个象限的便签颜色 ─────────────────────────────────────── */
+
+/* Q1: 重要且紧急 —— 粉红便签 */
+.quadrant-panel.q1 .note {
+    background: var(--qd-bg-note-q1);
+}
+
+/* Q2: 重要不紧急 —— 淡蓝便签 */
+.quadrant-panel.q2 .note {
+    background: var(--qd-bg-note-q2);
+}
+
+/* Q3: 不重要但紧急 —— 暖黄便签 */
+.quadrant-panel.q3 .note {
+    background: var(--qd-bg-note-q3);
+}
+
+/* Q4: 不重要不紧急 —— 淡绿便签 */
+.quadrant-panel.q4 .note {
+    background: var(--qd-bg-note-q4);
+}
+
+/* ── 已完成便签（降低饱和度） ──────────────────────────────────── */
+.note.completed {
+    opacity: 0.55;
+    filter: grayscale(0.3);
+}
+
+.note.completed .note-name {
+    text-decoration: line-through;
+}
+
+/* ── 便签内容 ─────────────────────────────────────────────────── */
+
+.note-time {
+    font-size: 0.68rem;
+    color: var(--qd-text-time);
+    display: block;
+    margin-bottom: 3px;
+    font-weight: 500;
+    font-family: "SF Mono", "Consolas", "Monaco", monospace;
+}
+
+.note-name {
+    font-size: 0.82rem;
+    color: var(--qd-text-content);
+    line-height: 1.35;
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.note-desc {
+    font-size: 0.7rem;
+    color: var(--qd-text-muted);
+    margin-top: 2px;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.note-action {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    opacity: 0;
+    transition: opacity var(--duration-fast);
+}
+
+.note:hover .note-action {
+    opacity: 1;
+}
+
+/* ── 空状态 ──────────────────────────────────────────────────── */
+.quadrant-notes-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--qd-empty-text);
+    font-size: 0.8rem;
+}
+
+/* ── 加载状态 ──────────────────────────────────────────────────── */
+.quadrant-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: var(--qd-text-muted);
+    font-size: 0.9rem;
+    gap: var(--space-2);
+}
+
+/* ── 象限面板边框色带（左侧） ──────────────────────────────────── */
+.quadrant-panel.q1 {
+    border-left: 3px solid var(--qd-border-accent-q1);
+}
+.quadrant-panel.q2 {
+    border-left: 3px solid var(--qd-border-accent-q2);
+}
+.quadrant-panel.q3 {
+    border-left: 3px solid var(--qd-border-accent-q3);
+}
+.quadrant-panel.q4 {
+    border-left: 3px solid var(--qd-border-accent-q4);
+}
+
+/* ── 响应式 ──────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+    /* 移动端：标签页模式 */
+    .quadrant-board--mobile {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        flex: 1;
+        min-height: 0;
+    }
+
+    /* 象限标签栏 */
+    .quadrant-tabs {
+        display: flex;
+        gap: 0;
+        flex-shrink: 0;
+        border-bottom: 2px solid var(--qd-border-panel);
+    }
+
+    .quadrant-tab {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: var(--space-2) var(--space-1) 6px;
+        border: none;
+        background: #faf8f5;
+        cursor: pointer;
+        transition: background var(--duration-fast);
+        position: relative;
+        font-family: inherit;
+    }
+
+    .quadrant-tab:not(:last-child) {
+        border-right: 1px solid var(--qd-border-panel);
+    }
+
+    .quadrant-tab.active {
+        background: #fff;
+    }
+
+    .quadrant-tab.active::after {
+        content: "";
+        position: absolute;
+        bottom: -2px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: currentColor;
+    }
+
+    .quadrant-tab.q1 {
+        color: var(--qd-border-accent-q1);
+    }
+    .quadrant-tab.q1.active::after {
+        background: var(--qd-border-accent-q1);
+    }
+    .quadrant-tab.q2 {
+        color: var(--qd-border-accent-q2);
+    }
+    .quadrant-tab.q2.active::after {
+        background: var(--qd-border-accent-q2);
+    }
+    .quadrant-tab.q3 {
+        color: var(--qd-border-accent-q3);
+    }
+    .quadrant-tab.q3.active::after {
+        background: var(--qd-border-accent-q3);
+    }
+    .quadrant-tab.q4 {
+        color: var(--qd-border-accent-q4);
+    }
+    .quadrant-tab.q4.active::after {
+        background: var(--qd-border-accent-q4);
+    }
+
+    .quadrant-tab-label {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+    }
+
+    .quadrant-tab-hint {
+        font-size: 0.6rem;
+        opacity: 0.7;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .quadrant-tab-count {
+        font-size: 0.65rem;
+        font-weight: 600;
+        background: var(--qd-border-panel);
+        color: #6b6560;
+        border-radius: var(--radius-sm);
+        padding: 1px 6px;
+        min-width: 16px;
+        text-align: center;
+    }
+
+    .quadrant-panel-header--mobile {
+        flex-shrink: 0;
+        padding: 10px 14px 6px;
+        margin-bottom: 0;
+        border-bottom: 1px dashed var(--qd-border-dashed);
+    }
+
+    /* 移动端象限面板填满剩余空间 */
+    .quadrant-board--mobile .quadrant-panel {
+        flex: 1;
+        min-height: 0;
+        max-height: none;
+        border-left: 3px solid transparent;
+        border-top: none;
+        overflow: hidden;
+    }
+
+    .quadrant-board--mobile .quadrant-panel.q1 {
+        border-left-color: var(--qd-border-accent-q1);
+    }
+    .quadrant-board--mobile .quadrant-panel.q2 {
+        border-left-color: var(--qd-border-accent-q2);
+    }
+    .quadrant-board--mobile .quadrant-panel.q3 {
+        border-left-color: var(--qd-border-accent-q3);
+    }
+    .quadrant-board--mobile .quadrant-panel.q4 {
+        border-left-color: var(--qd-border-accent-q4);
+    }
+}
+
+@media (max-width: 400px) {
+    .note {
+        width: 100%;
+    }
+}

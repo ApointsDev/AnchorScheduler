@@ -24,6 +24,8 @@ dist-ssr
 *.sw?
 *.db
 *.env
+# 用户上传头像等
+private/uploads/
 server/.env.azure
 deploy/AZURE_DEPLOYMENT_GUIDE.md
 deploy/AZURE_TROUBLESHOOTING.md

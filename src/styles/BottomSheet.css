@@ -1,0 +1,130 @@
+/* ── BottomSheet / 响应式侧栏 ──────────────────────────── */
+
+/* 宽屏侧栏 */
+.bottomsheet-sidebar {
+    border-right: 1px solid var(--color-border);
+    background: var(--color-bg-card);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.bottomsheet-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.bottomsheet-sidebar-body {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* 窄屏遮罩 */
+.bottomsheet-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: var(--z-modal-backdrop);
+    display: flex;
+    align-items: flex-end;
+    animation: bottomsheet-fade-in var(--duration-normal) ease;
+}
+
+@keyframes bottomsheet-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* 窄屏面板 */
+.bottomsheet-panel {
+    width: 100%;
+    max-height: 70vh;
+    background: var(--color-bg-card);
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: bottomsheet-slide-up var(--duration-slow) ease;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.12);
+}
+
+@keyframes bottomsheet-slide-up {
+    from {
+        transform: translateY(100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+.bottomsheet-handle {
+    width: 36px;
+    height: 4px;
+    background: var(--color-neutral-300);
+    border-radius: 2px;
+    margin: 10px auto 10px;
+    flex-shrink: 0;
+}
+
+.bottomsheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--space-5) 14px;
+}
+
+.bottomsheet-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text-dark);
+}
+
+.bottomsheet-close-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-light);
+    padding: var(--space-1);
+    display: flex;
+    align-items: center;
+    border-radius: var(--radius-md);
+}
+
+.bottomsheet-close-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-medium);
+}
+
+.bottomsheet-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 var(--space-5) var(--space-5);
+}
+
+/* 底部操作区（窄屏弹出） */
+.bottomsheet-footer {
+    padding: var(--space-3) var(--space-5);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+/* 底部操作区（宽屏侧栏） */
+.bottomsheet-sidebar-footer {
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}

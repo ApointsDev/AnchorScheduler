@@ -56,7 +56,9 @@ describe('AlgorithmService - Flexible DDL Tasks', () => {
     });
 
     // Check Flexible Task Assignment
-    const flexAssignment = result.scheduledTasks.find((t: any) => t.id === 'flex1');
+    const flexAssignment = result.scheduledTasks.find(
+      (t: any) => t.parentTaskId === 'flex1',
+    );
     expect(flexAssignment).toBeDefined();
     
     const assignedStart = new Date(flexAssignment.startTime);
@@ -105,7 +107,9 @@ describe('AlgorithmService - Flexible DDL Tasks', () => {
       slotDuration: 60
     });
 
-    const flexAssignment = result.scheduledTasks.find((t: any) => t.id === 'flex2');
+    const flexAssignment = result.scheduledTasks.find(
+      (t: any) => t.parentTaskId === 'flex2',
+    );
     expect(flexAssignment).toBeDefined();
     
     const assignedStart = new Date(flexAssignment.startTime);

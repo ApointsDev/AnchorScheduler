@@ -1,54 +1,54 @@
-@import './variables.css';
+@import "./tokens.css";
 
 /* 认证表单样式 */
 .auth-container {
-  min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
 }
 
 .auth-card {
-  width: 100%;
-  max-width: 400px;
+    width: 100%;
+    max-width: 400px;
 }
 
 .error-message {
-  background: var(--color-danger-light);
-  color: var(--color-danger-dark);
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  text-align: center;
-  font-size: 14px;
+    background: var(--color-danger-light);
+    color: var(--color-danger-dark);
+    padding: 12px;
+    border-radius: var(--radius-lg);
+    margin-bottom: 20px;
+    text-align: center;
+    font-size: 14px;
 }
 
 .switch-auth-link {
-  margin-top: 24px;
-  text-align: center;
-  font-size: 0.95rem;
-  color: var(--color-text-light);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+    margin-top: 24px;
+    text-align: center;
+    font-size: 0.95rem;
+    color: var(--color-text-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 .switch-auth-link a {
-  color: var(--color-primary);
-  font-weight: 600;
-  text-decoration: none;
-  transition: all 0.2s ease;
+    color: var(--color-primary);
+    font-weight: 600;
+    text-decoration: none;
+    transition: all var(--duration-normal) ease;
 }
 
 .switch-auth-link a:hover {
-  color: var(--color-primary-active-border);
-  text-decoration: underline;
+    color: var(--color-primary-active-border);
+    text-decoration: underline;
 }
 
 @media (max-width: 480px) {
-  .auth-card {
-    padding: 0;
-  }
+    .auth-card {
+        padding: 0;
+    }
 }

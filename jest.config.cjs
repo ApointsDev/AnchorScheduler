@@ -9,5 +9,11 @@ module.exports = {
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
-  modulePathIgnorePatterns: ["<rootDir>/server/dist/"]
+  modulePathIgnorePatterns: ["<rootDir>/server/dist/"],
+  testPathIgnorePatterns: [
+    "/node_modules/",
+    "<rootDir>/server/dist/",
+    "<rootDir>/devOld/",
+    "<rootDir>/.codex-backups/",
+  ],
 };

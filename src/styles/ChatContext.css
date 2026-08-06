@@ -1,0 +1,140 @@
+/* ── AI 聊天卡内上下文侧栏 ──────────────────────────────── */
+
+/* 卡片主体：flex 行，侧栏 + 主区域 */
+.ai-chat-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* 侧栏：卡内左侧 */
+.context-sidebar {
+    width: 240px;
+    min-width: 200px;
+    background: var(--color-bg-light);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.context-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border);
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--color-text-dark);
+    background: var(--color-bg-card);
+}
+
+.context-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 2px 0;
+}
+
+.context-empty {
+    padding: var(--space-5) 14px;
+    text-align: center;
+    color: var(--color-text-light);
+    font-size: 0.8rem;
+}
+
+.context-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) 14px;
+    cursor: pointer;
+    transition: background var(--duration-fast);
+}
+
+.context-item:hover {
+    background: var(--color-bg-hover);
+}
+
+.context-item.context-active {
+    background: var(--color-primary-50);
+}
+
+.context-icon {
+    color: var(--color-text-light);
+    flex-shrink: 0;
+}
+
+.context-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.context-title {
+    font-size: 0.8rem;
+    color: var(--color-text-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.context-meta {
+    font-size: 0.68rem;
+    color: var(--color-text-light);
+    margin-top: 1px;
+}
+
+.context-delete {
+    opacity: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-light);
+    padding: 3px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    transition: opacity var(--duration-fast);
+}
+
+.context-item:hover .context-delete {
+    opacity: 1;
+}
+
+.context-delete:hover {
+    background: var(--color-danger-light);
+    color: var(--color-danger);
+}
+
+/* 主聊天区域 */
+.ai-chat-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+/* 收起侧栏后的展开按钮 */
+.context-expand-btn {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-left: none;
+    border-radius: 0 6px 6px 0;
+    cursor: pointer;
+    padding: var(--space-3) var(--space-1);
+    color: var(--color-text-light);
+    transition: background var(--duration-fast);
+}
+
+.context-expand-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-medium);
+}

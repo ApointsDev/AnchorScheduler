@@ -1,7 +1,7 @@
 // 统一 API 类型定义
 // 注意：这些类型仅用于编译期约束，不参与运行时校验
 
-import { Task } from "../index";
+import { Task, Todo, Tag } from "../index";
 import type { RecurrenceRule, ScheduleType } from "../Services/types";
 
 export interface StatusMicrosoftTodoResponse {
@@ -250,4 +250,110 @@ export interface TaskListResponse {
     total: number;
     limit: number;
     offset: number;
+}
+
+// ── 用户状态 API 类型 ──────────────────────────────────────────
+
+export interface UserStatusResponse {
+    status: {
+        weekStart: string;
+        weekEnd: string;
+        completedThisWeek: number;
+        incompleteThisWeek: number;
+        avgCompleteDurationMs: number | null;
+        avgCompleteDurationHuman?: string | null;
+        completionHourMode: number | null;
+        modalHours: number[];
+        completedSampleSize: number;
+        computedAt: string;
+        fromCache?: boolean;
+    };
+}
+
+// ── 用户个人主页 ──────────────────────────────────────────────
+
+export interface UserHomepageResponse {
+    profile: {
+        id: string;
+        name: string;
+        avatar: string | null;
+        signature: string | null;
+        isMe: boolean;
+        region: { id: string; name: string; createdAt?: string } | null;
+        status: UserStatusResponse["status"] | null;
+        titles: Array<{
+            metric: string;
+            metricLabel: string;
+            titleLabel: string;
+            higherIsBetter: boolean;
+            rank: number | null;
+            value: number | null;
+            title: string | null;
+            eligible: boolean;
+            totalParticipants: number;
+        }>;
+    };
+}
+
+// ── 待办 / 标签 API 类型 ────────────────────────────────────────
+
+export interface TodoCreateRequest {
+    name: string;
+    description?: string;
+    completed?: boolean;
+    dueDate?: string;
+    importance?: "high" | "normal" | "low";
+    /** 四象限重要程度轴 [-1, 1] */
+    importanceScore?: number;
+    /** 四象限紧急程度轴 [-1, 1] */
+    urgencyScore?: number;
+    tagIds?: string[];
+    tagNames?: string[];
+}
+
+export interface TodoUpdateRequest {
+    name?: string;
+    description?: string | null;
+    completed?: boolean;
+    dueDate?: string | null;
+    importance?: "high" | "normal" | "low";
+    importanceScore?: number | null;
+    urgencyScore?: number | null;
+    tagIds?: string[];
+    tagNames?: string[];
+}
+
+/** 单独调整四象限双轴 */
+export interface PriorityAxesUpdateRequest {
+    importanceScore?: number | null;
+    urgencyScore?: number | null;
+}
+
+export interface TodoResponse {
+    todo: Todo;
+}
+
+export interface TodoListResponse {
+    todos: Todo[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
+export interface TagCreateRequest {
+    name: string;
+    color?: string;
+}
+
+export interface TagUpdateRequest {
+    name?: string;
+    color?: string | null;
+}
+
+export interface TagResponse {
+    tag: Tag;
+}
+
+export interface TagListResponse {
+    tags: Tag[];
 }

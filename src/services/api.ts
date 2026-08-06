@@ -1,6 +1,8 @@
 // API 服务文件，处理与后端的所有通信
 
-// 优先使用 VITE_API_BASE_URL（构建时注入），若未设置则使用当前页面 origin
+import type { ChatMessage } from "./llmService";
+
+// 开发模式下指向后端服务器 (默认 3000 端口)
 const isDev = import.meta.env.VITE_DEV_MODE === "true";
 const API_BASE_URL = isDev
     ? "http://localhost:3000"
@@ -106,6 +108,34 @@ export const login = async (data: LoginData): Promise<{ token: string }> => {
 // 启动 CAF OAuth 流程
 export const startCafAuth = (): void => {
     window.location.href = `${API_BASE_URL}/auth/caf`;
+};
+
+// 引导页状态（持久化到数据库）
+export const getOnboardingStatus = async (): Promise<boolean> => {
+    const token = getToken();
+    if (!token) return false;
+    const response = await customFetch(
+        `${API_BASE_URL}/api/settings/onboarding`,
+        { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.onboardingCompleted === true;
+};
+
+export const setOnboardingCompleted = async (
+    completed: boolean,
+): Promise<void> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    await customFetch(`${API_BASE_URL}/api/settings/onboarding`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ completed }),
+    });
 };
 
 // 启动Microsoft OAuth流程
@@ -379,6 +409,11 @@ export interface Task {
     parentTaskId?: string;
     importance?: "high" | "normal" | "low";
     scheduleType?: ScheduleType;
+    quadrant?: "q1" | "q2" | "q3" | "q4";
+    /** 四象限 · 重要程度轴 [-1, 1] */
+    importanceScore?: number | null;
+    /** 四象限 · 紧急程度轴 [-1, 1] */
+    urgencyScore?: number | null;
 }
 
 export interface TasksResponse {
@@ -449,7 +484,7 @@ export const createTask = async (
 export const updateTask = async (
     taskId: string,
     taskData: Partial<Omit<Task, "id">>,
-): Promise<Task & { conflictWarning?: ConflictWarning }> => {
+): Promise<{ task: Task; axes: { importanceScore: number | null; urgencyScore: number | null; quadrant: string }; conflictWarning?: ConflictWarning }> => {
     const token = getToken();
     if (!token) throw new Error("用户未登录");
 
@@ -581,6 +616,12 @@ export const approveQueueItem = async (
 
     if (!response.ok) {
         const error = await response.json();
+        if (response.status === 409 && error.conflicts) {
+            throw new ScheduleConflictError(
+                error.error || "日程冲突",
+                error.conflicts,
+            );
+        }
         throw new Error(error.error || "批准请求失败");
     }
 
@@ -617,18 +658,51 @@ export interface ScheduleQueueItem {
     createdAt: string;
 }
 
-/** 原始邮件数据 */
+/** 邮件列表项（不含正文，用于列表展示） */
+export interface EmailListItem {
+    id: string;
+    subject: string;
+    from?: { name: string; address: string };
+    receivedAt: string;
+    isRead: boolean;
+    isFlagged: boolean;
+    flags: string[];
+    isAiProcessed: boolean;
+    hasAttachments: boolean;
+}
+
+/** 原始邮件数据（含正文，用于详情查看） */
 export interface RawEmail {
     id: string;
     subject: string;
     from?: { name: string; address: string };
     receivedAt: string;
     isRead: boolean;
+    isFlagged: boolean;
+    flags: string[];
+    isAiProcessed: boolean;
     body: string;
+    htmlBody?: string;
     hasAttachments?: boolean;
     attachmentsCount?: number;
     source?: string;
 }
+
+export const getEmailList = async (
+    limit: number = 50,
+): Promise<{ emails: EmailListItem[]; total: number }> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch(
+        `/api/emails?limit=${encodeURIComponent(limit)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "获取邮件列表失败");
+    }
+    return response.json();
+};
 
 export const getRawEmail = async (emailId: string): Promise<RawEmail> => {
     const token = getToken();
@@ -645,6 +719,49 @@ export const getRawEmail = async (emailId: string): Promise<RawEmail> => {
     }
     const data = await response.json();
     return data.email as RawEmail;
+};
+
+/** 标记邮件为已读 */
+export const markEmailAsRead = async (emailId: string): Promise<void> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    await customFetch(`/api/emails/${encodeURIComponent(emailId)}/read`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+    });
+};
+
+/** 手动触发 AI 处理邮件 */
+export const triggerAiProcess = async (
+    emailId: string,
+): Promise<{
+    success: boolean;
+    message: string;
+    queuedSchedules: string[];
+    queueItems: ScheduleQueueItem[];
+    queuedTodos: string[];
+    todoQueueItems: TodoQueueItem[];
+    toolCallsTriggered: boolean;
+    validationFailed?: boolean;
+    lastValidationError?: string;
+}> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch(
+        `/api/emails/${encodeURIComponent(emailId)}/ai-process`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+        },
+    );
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "AI 处理失败");
+    }
+    return response.json();
 };
 
 export const getScheduleQueue = async (): Promise<{
@@ -665,6 +782,237 @@ export const getScheduleQueue = async (): Promise<{
         throw new Error(error.error || "获取队列失败");
     }
 
+    return response.json();
+};
+
+/** 待办审批队列项（与 ScheduleQueueItem 同形） */
+export interface TodoQueueItem {
+    id: string;
+    userId: string;
+    rawRequest: string;
+    status: string;
+    createdAt: string;
+}
+
+export const getTodoQueue = async (): Promise<{
+    queue: TodoQueueItem[];
+}> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+
+    const response = await customFetch(`/api/todo-queue`, {
+        method: "GET",
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "获取待办队列失败");
+    }
+
+    return response.json();
+};
+
+export const approveTodoQueueItem = async (queueId: string): Promise<any> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+
+    const response = await customFetch(
+        `/api/todo-queue/${encodeURIComponent(queueId)}/approve`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+        },
+    );
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "批准待办请求失败");
+    }
+
+    return response.json();
+};
+
+export const rejectTodoQueueItem = async (queueId: string): Promise<any> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+
+    const response = await customFetch(
+        `/api/todo-queue/${encodeURIComponent(queueId)}/reject`,
+        {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        },
+    );
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "拒绝待办请求失败");
+    }
+
+    return response.json();
+};
+
+// ── AI 聊天记录持久化 ──────────────────────────────────────────────
+
+export const loadChatHistory = async (): Promise<ChatMessage[]> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch("/api/chat/history", {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "加载聊天记录失败");
+    }
+    const data = await response.json();
+    return data.messages || [];
+};
+
+export const saveChatHistory = async (
+    messages: ChatMessage[],
+    contextId?: string,
+): Promise<{ ok: boolean; contextId: string }> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch("/api/chat/history", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ messages, contextId }),
+    });
+    if (!response.ok) {
+        throw new Error("Failed to save chat history");
+    }
+    return response.json();
+};
+
+// ── 聊天上下文管理 ──────────────────────────────────────────────
+
+export interface ChatContextInfo {
+    id: string;
+    title: string;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+    messageCount: number;
+}
+
+export const getChatContexts = async (): Promise<ChatContextInfo[]> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch("/api/chat/contexts", {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("Failed to load contexts");
+    const data = await response.json();
+    return data.contexts || [];
+};
+
+export const createChatContext = async (): Promise<ChatContextInfo> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch("/api/chat/contexts", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("Failed to create context");
+    const data = await response.json();
+    return data.context;
+};
+
+export const loadChatContext = async (
+    contextId: string,
+): Promise<ChatMessage[]> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch(
+        `/api/chat/contexts/${encodeURIComponent(contextId)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok) throw new Error("Failed to load context");
+    const data = await response.json();
+    return data.messages || [];
+};
+
+export const deleteChatContext = async (contextId: string): Promise<void> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch(
+        `/api/chat/contexts/${encodeURIComponent(contextId)}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok) throw new Error("Failed to delete context");
+};
+
+/** 撤销最后一轮对话，同时删除该轮创建的任务 */
+export const undoLastChatTurn = async (): Promise<{
+    ok: boolean;
+    removedMessages: number;
+    deletedTasks: number;
+}> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch("/api/chat/undo", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "撤销失败");
+    }
+    return response.json();
+};
+
+// ── 推广邮件日程设置 ──────────────────────────────────────────────
+
+export const setAutoSchedulePromotions = async (
+    enabled: boolean,
+): Promise<void> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    await customFetch("/api/settings/auto-schedule-promotions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ enabled }),
+    });
+};
+
+export const setStripReplyPrefix = async (enabled: boolean): Promise<void> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    await customFetch("/api/settings/strip-reply-prefix", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ enabled }),
+    });
+};
+
+export const getUserSettings = async (): Promise<{
+    autoSchedulePromotions: boolean;
+    stripReplyPrefix: boolean;
+}> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch("/api/me", {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("获取用户设置失败");
     return response.json();
 };
 
@@ -959,3 +1307,157 @@ export const disableCalDavServer =
 
         return response.json();
     };
+
+// ── 日程分享 ──────────────────────────────────────────
+
+export interface ShareLink {
+    id: string;
+    token: string;
+    name: string;
+    dateStart: string | null;
+    dateEnd: string | null;
+    taskIds: string[] | null;
+    expiresAt: string | null;
+    createdAt: string;
+    shareUrl: string;
+}
+
+export interface SharedScheduleView {
+    share: { name: string; createdAt: string };
+    tasks: Task[];
+    user: { name: string };
+}
+
+export const createShare = async (data: {
+    name?: string;
+    dateStart?: string;
+    dateEnd?: string;
+    taskIds?: string[];
+    expiresInDays?: number;
+}): Promise<{ token: string; shareUrl: string; expiresAt: string | null }> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch("/api/share/create", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "创建分享失败");
+    }
+    return response.json();
+};
+
+export const getShareList = async (): Promise<{ shares: ShareLink[] }> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch("/api/share/list", {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("获取分享列表失败");
+    return response.json();
+};
+
+export const deleteShare = async (shareToken: string): Promise<void> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch(
+        `/api/share/${encodeURIComponent(shareToken)}`,
+        {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+        },
+    );
+    if (!response.ok) throw new Error("删除分享失败");
+};
+
+export const getSharedView = async (
+    shareToken: string,
+): Promise<SharedScheduleView> => {
+    const response = await customFetch(
+        `/api/share/view/${encodeURIComponent(shareToken)}`,
+    );
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "加载分享失败");
+    }
+    return response.json();
+};
+
+// ── 语音识别（讯飞大模型多语种） ──────────────────────────
+
+export interface SpeechRecognizeResult {
+    success: boolean;
+    text: string;
+    sid?: string;
+    segments?: Array<{ word: string; language?: string }>;
+    encoding?: string;
+    sampleRate?: number;
+}
+
+export interface SpeechStatus {
+    configured: boolean;
+    provider: string;
+    host: string;
+    supportedFormats: string[];
+    maxDurationSec: number;
+    sampleRates: number[];
+}
+
+/** 查询语音识别服务状态 */
+export const getSpeechStatus = async (): Promise<SpeechStatus> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+    const response = await customFetch("/api/speech/status", {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "获取语音识别状态失败");
+    }
+    return response.json();
+};
+
+/**
+ * 上传音频进行语音识别
+ * @param audio Blob 或 File（建议 16k/16bit/mono WAV 或 MP3，≤60s）
+ * @param options.language 可选语种，如 zh / en / zh|en
+ */
+export const recognizeSpeech = async (
+    audio: Blob | File,
+    options?: {
+        language?: string;
+        sampleRate?: 8000 | 16000;
+        encoding?: "raw" | "lame";
+        filename?: string;
+    },
+): Promise<SpeechRecognizeResult> => {
+    const token = getToken();
+    if (!token) throw new Error("用户未登录");
+
+    const form = new FormData();
+    const filename =
+        options?.filename ||
+        (audio instanceof File ? audio.name : "recording.wav");
+    form.append("file", audio, filename);
+    if (options?.language) form.append("language", options.language);
+    if (options?.sampleRate)
+        form.append("sampleRate", String(options.sampleRate));
+    if (options?.encoding) form.append("encoding", options.encoding);
+
+    const response = await customFetch("/api/speech/recognize", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "语音识别失败");
+    }
+    return response.json();
+};

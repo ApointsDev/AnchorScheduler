@@ -1,0 +1,722 @@
+/* ═══════════════════════════════════════════════════════════
+   THEME: Figma
+   基于 Figma 设计文件中的完整控件规格
+   映射到 ui.css / Schedule.css 中的所有现有组件类名
+   ═══════════════════════════════════════════════════════════ */
+
+html[data-style-theme="figma"] {
+    /* ═══════════════════════════════════════════════════════
+       1. COLOR SCALES (from Figma Paint Styles)
+       ═══════════════════════════════════════════════════════ */
+
+    /* Primary: #8B5CF6 at 500 */
+    --color-primary-50: #f5f3ff;
+    --color-primary-100: #ede9fe;
+    --color-primary-200: #ddd6fe;
+    --color-primary-300: #c4b5fd;
+    --color-primary-400: #a78bfa;
+    --color-primary-500: #8b5cf6;
+    --color-primary-600: #7c3aed;
+    --color-primary-700: #6d28d9;
+    --color-primary-800: #5b21b6;
+    --color-primary-900: #4c1d95;
+
+    /* Neutral: Figma background/text hierarchy */
+    --color-neutral-50: #fafafa;
+    --color-neutral-100: #f3f4f6;
+    --color-neutral-200: #e5e7eb;
+    --color-neutral-300: #d1d5db;
+    --color-neutral-400: #9ca3af;
+    --color-neutral-500: #6b7280;
+    --color-neutral-600: #4b5563;
+    --color-neutral-700: #374151;
+    --color-neutral-800: #1f2937;
+    --color-neutral-900: #111827;
+
+    /* Status: Figma 语义色 styles */
+    --color-success-50: #ecfdf5;
+    --color-success-100: #d1fae5;
+    --color-success-200: #a7f3d0;
+    --color-success-300: #6ee7b7;
+    --color-success-400: #34d399;
+    --color-success-500: #10b981;
+    --color-success-600: #059669;
+    --color-success-700: #047857;
+    --color-success-800: #065f46;
+    --color-success-900: #064e3b;
+
+    --color-danger-50: #fef2f2;
+    --color-danger-100: #fee2e2;
+    --color-danger-200: #fecaca;
+    --color-danger-300: #fca5a5;
+    --color-danger-400: #f87171;
+    --color-danger-500: #ef4444;
+    --color-danger-600: #dc2626;
+    --color-danger-700: #b91c1c;
+    --color-danger-800: #991b1b;
+    --color-danger-900: #7f1d1d;
+
+    --color-warning-50: #fffbeb;
+    --color-warning-100: #fff7ed;
+    --color-warning-200: #ffedd5;
+    --color-warning-300: #fed7aa;
+    --color-warning-400: #fdba74;
+    --color-warning-500: #f59e0b;
+    --color-warning-600: #d97706;
+    --color-warning-700: #b45309;
+    --color-warning-800: #92400e;
+    --color-warning-900: #78350f;
+
+    --color-info-50: #eff6ff;
+    --color-info-100: #dbeafe;
+    --color-info-200: #bfdbfe;
+    --color-info-300: #93c5fd;
+    --color-info-400: #60a5fa;
+    --color-info-500: #3b82f6;
+    --color-info-600: #2563eb;
+    --color-info-700: #1d4ed8;
+    --color-info-800: #1e40af;
+    --color-info-900: #1e3a8a;
+
+    /* ═══════════════════════════════════════════════════════
+       2. SEMANTIC ALIASES
+       ═══════════════════════════════════════════════════════ */
+
+    --color-surface-primary: #fafafa;
+    --color-surface-secondary: #f3f4f6;
+    --color-surface-card: #ffffff;
+    --color-surface-overlay: rgba(0, 0, 0, 0.5);
+
+    --color-text-primary: #1f2937;
+    --color-text-secondary: #4b5563;
+    --color-text-tertiary: #9ca3af;
+    --color-text-inverse: #ffffff;
+
+    --color-border-default: #e5e7eb;
+    --color-border-subtle: #f3f4f6;
+    --color-border-strong: #d1d5db;
+
+    --color-brand-primary: #8b5cf6;
+    --color-brand-primary-hover: #7c3aed;
+    --color-brand-primary-active: #6d28d9;
+
+    /* ═══════════════════════════════════════════════════════
+       3. PRIMITIVES
+       ═══════════════════════════════════════════════════════ */
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-2xl: 20px;
+    --radius-full: 9999px;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+    --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.15);
+
+    --font-size-xs: 0.7rem;
+    --font-size-sm: 0.8rem;
+    --font-size-base: 0.875rem;
+    --font-size-lg: 1rem;
+    --font-size-xl: 1.15rem;
+    --font-size-2xl: 1.25rem;
+    --font-size-3xl: 1.5rem;
+
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    --line-height-tight: 1.25;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.7;
+
+    --duration-fast: 0.15s;
+    --duration-normal: 0.2s;
+    --duration-slow: 0.3s;
+
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-modal-backdrop: 1000;
+    --z-modal: 1001;
+    --z-tooltip: 1100;
+
+    --breakpoint-xs: 480px;
+    --breakpoint-sm: 640px;
+    --breakpoint-md: 768px;
+    --breakpoint-lg: 1024px;
+    --container-max-width: 1100px;
+    --settings-max-width: 900px;
+
+    /* ═══════════════════════════════════════════════════════
+       4. BACKWARD COMPATIBILITY LAYER
+       ═══════════════════════════════════════════════════════ */
+
+    --color-primary: var(--color-brand-primary);
+    --color-primary-light: var(--color-primary-400);
+    --color-primary-active-border: var(--color-primary-600);
+
+    --color-text-dark: var(--color-text-primary);
+    --color-text-medium: var(--color-text-secondary);
+    --color-text-light: var(--color-text-tertiary);
+
+    --color-bg-light: var(--color-surface-primary);
+    --color-bg-hover: var(--color-surface-secondary);
+    --color-bg-card: var(--color-surface-card);
+
+    --color-border: var(--color-border-default);
+    --color-white: #ffffff;
+
+    --color-success: var(--color-success-500);
+    --color-danger: var(--color-danger-500);
+    --color-danger-dark: var(--color-danger-600);
+    --color-danger-light: var(--color-danger-100);
+    --color-warning: var(--color-warning-500);
+    --color-info: var(--color-info-500);
+
+    --color-gradient-start: var(--color-primary-500);
+    --color-gradient-end: var(--color-primary-600);
+
+    --color-primary-active: var(--color-primary-600);
+    --color-secondary-active: #e5e7eb;
+    --color-outline-active: #ede9fe;
+    --color-ghost-active: #ede9fe;
+    --color-danger-active: var(--color-danger-700);
+
+    /* ── Missing variables ─────────────────────── */
+    --color-bg-white: #ffffff;
+    --color-text: #374151;
+    --color-bg-subtle: #f3f4f6;
+    --color-success-bg: #d1fae5;
+    --color-bg-secondary: #f3f4f6;
+    --color-border-light: #f3f4f6;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   5. FIGMA COMPONENT OVERRIDES
+   Only applies when data-style-theme="figma"
+   ═══════════════════════════════════════════════════════════ */
+
+html[data-style-theme="figma"] {
+    /* ───────────────────────────────────────────────────────
+       5a. BUTTON — ui-button
+       Figma: 3 types × 5 states × 3 sizes
+       Large 52px / Medium 44px / Small 32px
+       ─────────────────────────────────────────────────────── */
+
+    /* --- Base button reset --- */
+    .ui-button {
+        border-radius: 6px;
+        font-weight: var(--font-weight-medium);
+        transition: all var(--duration-fast);
+        border: 1px solid transparent;
+    }
+
+    /* --- Primary — Figma Primary Fill --- */
+    .ui-button-primary {
+        background-color: #8b5cf6;
+        color: #ffffff;
+        border-color: transparent;
+    }
+    .ui-button-primary:hover {
+        background-color: #7c3aed;
+        color: #ffffff;
+    }
+    .ui-button-primary:active {
+        background-color: #6d28d9;
+    }
+
+    /* --- Secondary — Figma Secondary Outline --- */
+    .ui-button-secondary {
+        background-color: transparent;
+        color: #8b5cf6;
+        border-color: #8b5cf6;
+    }
+    .ui-button-secondary:hover {
+        background-color: #ede9fe;
+        color: #7c3aed;
+        border-color: #7c3aed;
+    }
+    .ui-button-secondary:active {
+        background-color: #ddd6fe;
+        color: #6d28d9;
+        border-color: #6d28d9;
+    }
+
+    /* --- Outline — same as Figma Secondary (outline style) --- */
+    .ui-button-outline {
+        background-color: transparent;
+        color: #8b5cf6;
+        border-color: #8b5cf6;
+    }
+    .ui-button-outline:hover {
+        background-color: #ede9fe;
+        color: #7c3aed;
+        border-color: #7c3aed;
+    }
+    .ui-button-outline:active {
+        background-color: #ddd6fe;
+        color: #6d28d9;
+        border-color: #6d28d9;
+    }
+
+    /* --- Ghost — Figma Ghost (text-only) --- */
+    .ui-button-ghost {
+        background-color: transparent;
+        color: #8b5cf6;
+        border-color: transparent;
+    }
+    .ui-button-ghost:hover {
+        background-color: #ede9fe;
+        color: #7c3aed;
+    }
+    .ui-button-ghost:active {
+        background-color: #ddd6fe;
+        color: #6d28d9;
+    }
+
+    /* --- Danger — Figma red tones --- */
+    .ui-button-danger {
+        background-color: #ef4444;
+        color: #ffffff;
+        border-color: transparent;
+    }
+    .ui-button-danger:hover {
+        background-color: #dc2626;
+    }
+    .ui-button-danger:active {
+        background-color: #b91c1c;
+    }
+
+    /* --- Disabled state --- */
+    .ui-button:disabled {
+        background-color: #9ca3af;
+        color: rgba(255, 255, 255, 0.5);
+        border-color: transparent;
+        opacity: 1;
+        cursor: not-allowed;
+    }
+    .ui-button-secondary:disabled,
+    .ui-button-outline:disabled {
+        background-color: transparent;
+        color: #9ca3af;
+        border-color: #9ca3af;
+    }
+    .ui-button-ghost:disabled {
+        background-color: transparent;
+        color: #9ca3af;
+        border-color: transparent;
+    }
+
+    /* ───────────────────────────────────────────────────────
+       5b. CARD — ui-card
+       Figma card page: radius 16, white bg, subtle stroke
+       ─────────────────────────────────────────────────────── */
+
+    .ui-card {
+        background: #ffffff;
+        border-radius: var(--radius-xl); /* 16px */
+        border: 1px solid rgba(139, 92, 246, 0.08); /* subtle purple */
+        box-shadow: var(--shadow-sm);
+    }
+
+    .ui-card-header {
+        padding: 16px 20px 10px;
+    }
+
+    .ui-card-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .ui-card-content {
+        padding: 0 20px 16px;
+        color: #4b5563;
+    }
+
+    .ui-card-footer {
+        padding: 12px 20px 20px;
+    }
+
+    /* ───────────────────────────────────────────────────────
+       5c. BADGE — ui-badge (Figma Status Pill)
+       Figma: radius 20, padding 2/8, 10px Medium
+       ─────────────────────────────────────────────────────── */
+
+    .ui-badge {
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+    }
+
+    .ui-badge-success {
+        background-color: #d1fae5;
+        color: #10b981;
+    }
+
+    .ui-badge-warning {
+        background-color: #feefb3;
+        color: #f59e0b;
+    }
+
+    .ui-badge-error {
+        background-color: #fee2e2;
+        color: #ef4444;
+    }
+
+    .ui-badge-info {
+        background-color: #dbeafe;
+        color: #3b82f6;
+    }
+
+    .ui-badge-neutral {
+        background-color: #ede9fe;
+        color: #8b5cf6;
+    }
+
+    /* ───────────────────────────────────────────────────────
+       5d. INPUT — ui-input / ui-textarea
+       Figma input page: 7 states × 3 sizes
+       ─────────────────────────────────────────────────────── */
+
+    /* --- Label --- */
+    .ui-label {
+        font-size: 16px;
+        font-weight: 500;
+        color: #1f2937;
+        margin-bottom: 6px;
+    }
+
+    /* --- Input field --- */
+    .ui-input {
+        padding: 10px var(--space-3);
+        border: 1px solid #d1d5d8;
+        border-radius: 6px;
+        font-size: 1rem;
+        background: #ffffff;
+        color: #1f2937;
+        transition: border-color var(--duration-fast);
+        box-sizing: border-box;
+    }
+
+    .ui-input::placeholder {
+        color: #9ca3af;
+    }
+
+    /* Hover — Figma input hover border */
+    .ui-input:hover:not(:focus):not(.ui-input-error) {
+        border-color: #a78bfa;
+    }
+
+    /* Focus / Filled — Figma input focus border */
+    .ui-input:focus {
+        border-color: #8b5cf6;
+        box-shadow: none;
+        outline: none;
+    }
+
+    /* Error — Figma input error */
+    .ui-input-error {
+        border-color: #ef4444;
+    }
+    .ui-input-error:focus {
+        border-color: #ef4444;
+        box-shadow: none;
+    }
+
+    .ui-input-error-message {
+        margin-top: 6px;
+        font-size: 16px;
+        color: #ef4444;
+    }
+
+    /* Disabled */
+    .ui-input:disabled {
+        background-color: #f3f4f6;
+        border-color: #e5e7eb;
+        color: #9ca3af;
+        cursor: not-allowed;
+    }
+
+    /* --- Helper text (通用辅助文本) --- */
+    .ui-input-wrapper {
+        margin-bottom: 0;
+    }
+
+    /* --- Textarea --- */
+    .ui-textarea {
+        padding: 10px var(--space-3);
+        border: 1px solid #d1d5d8;
+        border-radius: 6px;
+        font-size: 1rem;
+        background: #ffffff;
+        color: #1f2937;
+        min-height: 80px;
+        transition: border-color var(--duration-fast);
+    }
+    .ui-textarea:hover:not(:focus) {
+        border-color: #a78bfa;
+    }
+    .ui-textarea:focus {
+        border-color: #8b5cf6;
+        box-shadow: none;
+        outline: none;
+    }
+    .ui-textarea:disabled {
+        background-color: #f3f4f6;
+        border-color: #e5e7eb;
+        color: #9ca3af;
+        cursor: not-allowed;
+    }
+
+    /* Chat action bar — keep input compact, consistent with default theme */
+    .chat-action-bar .ui-textarea {
+        min-height: 36px;
+        height: 36px;
+        max-height: 36px;
+        padding: var(--space-2) var(--space-3);
+        font-size: 0.9rem;
+        resize: none;
+    }
+
+    /* ───────────────────────────────────────────────────────
+       5e. MODAL — ui-modal
+       Figma 弹窗卡 (empty page), using card + overlay pattern
+       ─────────────────────────────────────────────────────── */
+
+    .ui-modal-overlay {
+        background-color: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+    }
+
+    .ui-modal-container {
+        background: #ffffff;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        max-width: 480px;
+    }
+
+    .ui-modal-header {
+        padding: 20px 24px 12px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .ui-modal-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .ui-modal-close {
+        color: #9ca3af;
+        padding: 6px;
+        border-radius: 8px;
+    }
+    .ui-modal-close:hover {
+        background-color: #f3f4f6;
+        color: #4b5563;
+    }
+
+    .ui-modal-content {
+        padding: 20px 24px;
+        color: #4b5563;
+        line-height: 1.6;
+    }
+
+    .ui-modal-footer {
+        padding: 16px 24px;
+        border-top: 1px solid #e5e7eb;
+        background-color: #fafafa;
+        border-bottom-left-radius: 20px;
+        border-bottom-right-radius: 20px;
+    }
+
+    /* ───────────────────────────────────────────────────────
+       5f. TOGGLE / SWITCH — toggle-switch
+       Figma primary purple
+       ─────────────────────────────────────────────────────── */
+
+    .toggle-switch {
+        background: #d1d5db;
+    }
+    .toggle-switch.active {
+        background: #8b5cf6;
+    }
+
+    /* ───────────────────────────────────────────────────────
+       5g. SEARCH INPUT — search-input-container
+       Figma input page: search icon + clear button variant
+       ─────────────────────────────────────────────────────── */
+
+    .search-input-container .ui-input {
+        padding: 10px 16px;
+        padding-left: 40px; /* room for search icon */
+        height: auto;
+        font-size: var(--font-size-sm);
+    }
+
+    .search-icon {
+        color: #9ca3af;
+        left: 12px;
+    }
+
+    .search-clear-btn {
+        color: #9ca3af;
+        right: 6px;
+    }
+    .search-clear-btn:hover {
+        background: #f3f4f6;
+        color: #4b5563;
+    }
+
+    /* ───────────────────────────────────────────────────────
+       5h. TOGGLE BUTTON — ui-toggle-btn
+       ─────────────────────────────────────────────────────── */
+
+    .ui-toggle-btn.toggled {
+        color: #7c3aed;
+        background-color: #f5f3ff;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       6. SCHEDULE PAGE COMPONENTS (Schedule.css)
+       ═══════════════════════════════════════════════════════ */
+
+    /* ───────────────────────────────────────────────────────
+       6a. ScheduleCard — ios-card
+       Figma card page: ScheduleCard, radius 16, white bg
+       ─────────────────────────────────────────────────────── */
+
+    .ios-card {
+        background: #ffffff;
+        border-radius: var(--radius-xl); /* 16px */
+        padding: 14px 16px;
+    }
+
+    .ios-card:active {
+        background: #f5f3ff;
+    }
+
+    /* Time column */
+    .ios-card-time {
+        font-size: 12px;
+        font-weight: 500;
+        color: #4b5563;
+        font-variant-numeric: tabular-nums;
+    }
+    .ios-card-time-end {
+        font-size: 12px;
+        font-weight: 500;
+        color: #4b5563;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Divider line between time and content */
+    .ios-card-divider {
+        width: 2px;
+        margin: 4px 12px;
+        background: #e5e7eb;
+        border-radius: 1px;
+    }
+
+    /* Title */
+    .ios-card-title {
+        font-size: 15px;
+        font-weight: 400;
+        color: #1f2937;
+        margin: 0 0 4px;
+        line-height: 1.5;
+    }
+
+    /* Description */
+    .ios-card-desc {
+        font-size: 13px;
+        color: #6b7280;
+        margin: 0 0 4px;
+    }
+
+    /* Location */
+    .ios-card-location {
+        font-size: 12px;
+        color: #9ca3af;
+    }
+
+    /* Actions (right side) */
+    .ios-card-actions {
+        margin-left: 8px;
+        align-self: center;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       7. COMPONENT COLOR TOKENS (from figma.css originally)
+       ═══════════════════════════════════════════════════════ */
+
+    /* ── Log Viewer ──────────────────────────────────────── */
+    --color-log-payload-bg: #1e1b4b;
+    --color-log-payload-text: #e0e7ff;
+    --color-log-payload-link: #a78bfa;
+
+    /* ── Timeline ────────────────────────────────────────── */
+    --color-timeline-line: #e5e7eb;
+    --color-timeline-dot: #d1d5db;
+    --color-timeline-dot-active: #8b5cf6;
+    --color-timeline-dot-active-shadow: #ddd6fe;
+    --color-timeline-dot-completed: #10b981;
+    --color-timeline-dot-completed-shadow: #d1fae5;
+    --color-timeline-dot-overdue: #ef4444;
+    --color-timeline-dot-overdue-shadow: #fee2e2;
+
+    /* ── Task Cards ──────────────────────────────────────── */
+    --color-task-card-active-bg: #f5f3ff;
+    --color-task-card-upcoming-border: #a78bfa;
+
+    /* ── Mini Tasks ──────────────────────────────────────── */
+    --color-mini-task-bg: #ede9fe;
+    --color-mini-task-text: #6d28d9;
+    --color-mini-task-time: #7c3aed;
+
+    /* ── AI Chat ─────────────────────────────────────────── */
+    --color-chat-user-bg: #8b5cf6;
+    --color-chat-assistant-bg: #f3f4f6;
+    --color-chat-assistant-text: #1f2937;
+    --color-chat-tool-header: #6b7280;
+    --color-chat-tool-output-bg: #1e1b4b;
+    --color-chat-tool-output-text: #e0e7ff;
+    --color-chat-loading-dot: #d1d5db;
+
+    /* ── Quadrant View ───────────────────────────────────── */
+    --qd-bg-panel: #fafafa;
+    --qd-border-panel: #e5e7eb;
+    --qd-border-dashed: #d1d5db;
+    --qd-text-heading: #1f2937;
+    --qd-text-muted: #9ca3af;
+    --qd-text-content: #374151;
+    --qd-text-time: #6b7280;
+    --qd-bg-note-default: #f5f3ff;
+    --qd-bg-note-q1: #fce4ec;
+    --qd-bg-note-q2: #ede9fe;
+    --qd-bg-note-q3: #fff8e1;
+    --qd-bg-note-q4: #e8f5e9;
+    --qd-border-accent-q1: #ec4899;
+    --qd-border-accent-q2: #8b5cf6;
+    --qd-border-accent-q3: #f59e0b;
+    --qd-border-accent-q4: #10b981;
+    --qd-empty-text: #d1d5db;
+    --qd-pin-light: #ede9fe;
+    --qd-pin-dark: #6d28d9;
+}

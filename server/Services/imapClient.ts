@@ -36,6 +36,17 @@ export class ImapClient {
             return;
         }
 
+        // 清理上一个失败的 client（防止孤儿 socket 事件）
+        if (this.client) {
+            this.client.removeAllListeners();
+            try {
+                this.client.close();
+            } catch {
+                /* ignore */
+            }
+            this.client = null;
+        }
+
         // CAF OIDC 用户使用 XOAUTH2 认证
         const auth: any = this.config.useOAuth
             ? {
@@ -58,11 +69,30 @@ export class ImapClient {
             socketTimeout: 120000,
         });
 
+        // 必须监听 error 事件，防止 socket 超时等异常成为 uncaught exception
+        this.client.on("error", (err) => {
+            logger.debug(
+                `IMAP client socket error: ${err.message || String(err)}`,
+            );
+        });
+
         const authMethod = this.config.useOAuth ? "XOAUTH2" : "password";
         logger.info(
             `正在连接 IMAP 服务器 (${authMethod}): ${this.config.host}:${this.config.port}`,
         );
-        await this.client.connect();
+        try {
+            await this.client.connect();
+        } catch (connectErr) {
+            // connect 失败时清理 client，避免孤儿事件
+            this.client.removeAllListeners();
+            try {
+                this.client.close();
+            } catch {
+                /* ignore */
+            }
+            this.client = null;
+            throw connectErr;
+        }
         logger.success(`IMAP 连接成功: ${this.config.host}`);
     }
 
@@ -188,6 +218,10 @@ export class ImapClient {
         )) {
             const rawSource = msg.source || Buffer.from("");
             const parsed = await simpleParser(rawSource);
+            const flagSet = msg.flags || new Set<string>();
+            const flagArr = Array.from(flagSet).map((f) =>
+                typeof f === "string" ? f : String(f),
+            );
             messages.push({
                 id: String(msg.uid),
                 subject: parsed.subject || "(无主题)",
@@ -207,9 +241,10 @@ export class ImapClient {
                           ? msg.internalDate.toISOString()
                           : new Date().toISOString(),
                 ),
-                isRead: msg.flags
-                    ? msg.flags.has("\\Seen") || msg.flags.has("Seen")
-                    : false,
+                isRead: flagSet.has("\\Seen"),
+                isFlagged: flagSet.has("\\Flagged"),
+                flags: flagArr,
+                isAiProcessed: false,
                 body: this.cleanHtmlContent(parsed.text || parsed.html || ""),
                 hasAttachments: (parsed.attachments?.length || 0) > 0,
             });
@@ -249,6 +284,8 @@ export class ImapClient {
                     from: { name: string; address: string } | undefined;
                     receivedAt: string;
                     isRead: boolean;
+                    isFlagged: boolean;
+                    flags: string[];
                     hasAttachments: boolean;
                 }[] = [];
 
@@ -258,6 +295,10 @@ export class ImapClient {
                     flags: true,
                     internalDate: true,
                 })) {
+                    const flagSet = msg.flags || new Set<string>();
+                    const flagArr = Array.from(flagSet).map((f) =>
+                        typeof f === "string" ? f : String(f),
+                    );
                     messages.push({
                         uid: msg.uid,
                         subject: msg.envelope?.subject || "(无主题)",
@@ -275,12 +316,19 @@ export class ImapClient {
                                 ? msg.internalDate.toISOString()
                                 : new Date().toISOString(),
                         ),
-                        isRead: msg.flags
-                            ? msg.flags.has("\\Seen") || msg.flags.has("Seen")
-                            : false,
+                        isRead: flagSet.has("\\Seen"),
+                        isFlagged: flagSet.has("\\Flagged"),
+                        flags: flagArr,
                         hasAttachments: false,
                     });
                 }
+
+                // 按接收时间降序排序（最新邮件在前）
+                messages.sort(
+                    (a, b) =>
+                        new Date(b.receivedAt).getTime() -
+                        new Date(a.receivedAt).getTime(),
+                );
 
                 logger.success(`成功获取 ${messages.length} 封 IMAP 邮件`);
                 return messages.map((m) => ({
@@ -289,6 +337,9 @@ export class ImapClient {
                     from: m.from,
                     receivedAt: m.receivedAt,
                     isRead: m.isRead,
+                    isFlagged: m.isFlagged,
+                    flags: m.flags,
+                    isAiProcessed: false,
                     hasAttachments: m.hasAttachments,
                 }));
             } finally {
@@ -325,7 +376,10 @@ export class ImapClient {
                     from: { name: string; address: string } | undefined;
                     receivedAt: string;
                     isRead: boolean;
+                    isFlagged: boolean;
+                    flags: string[];
                     body: string;
+                    htmlBody: string;
                     hasAttachments: boolean;
                 }[] = [];
 
@@ -342,6 +396,11 @@ export class ImapClient {
                 )) {
                     const rawSource = msg.source || Buffer.from("");
                     const parsed = await simpleParser(rawSource);
+                    const rawHtml = parsed.html || "";
+                    const flagSet = msg.flags || new Set<string>();
+                    const flagArr = Array.from(flagSet).map((f) =>
+                        typeof f === "string" ? f : String(f),
+                    );
                     messages.push({
                         uid: msg.uid,
                         subject: parsed.subject || "(无主题)",
@@ -362,12 +421,13 @@ export class ImapClient {
                                   ? msg.internalDate.toISOString()
                                   : new Date().toISOString(),
                         ),
-                        isRead: msg.flags
-                            ? msg.flags.has("\\Seen") || msg.flags.has("Seen")
-                            : false,
+                        isRead: flagSet.has("\\Seen"),
+                        isFlagged: flagSet.has("\\Flagged"),
+                        flags: flagArr,
                         body: this.cleanHtmlContent(
-                            parsed.text || parsed.html || "",
+                            parsed.text || rawHtml || "",
                         ),
+                        htmlBody: rawHtml,
                         hasAttachments: (parsed.attachments?.length || 0) > 0,
                     });
                 }
@@ -383,7 +443,11 @@ export class ImapClient {
                     from: m.from,
                     receivedAt: m.receivedAt,
                     isRead: m.isRead,
+                    isFlagged: m.isFlagged,
+                    flags: m.flags,
+                    isAiProcessed: false,
                     body: m.body,
+                    htmlBody: m.htmlBody || undefined,
                     hasAttachments: m.hasAttachments,
                 };
             } finally {
@@ -400,6 +464,31 @@ export class ImapClient {
                 error.stack || "",
             );
             throw error;
+        }
+    }
+
+    /** 将邮件标记为已读（设置 \Seen 标志） */
+    async markAsRead(emailId: string): Promise<void> {
+        try {
+            await this.ensureConnected();
+            const lock = await this.client!.getMailboxLock("INBOX");
+            try {
+                const uid = parseInt(emailId, 10);
+                if (isNaN(uid)) {
+                    logger.warn(`Invalid email UID for markAsRead: ${emailId}`);
+                    return;
+                }
+                await this.client!.messageFlagsSet([uid], ["\\Seen"], {
+                    uid: true,
+                });
+                logger.info(`IMAP: Marked email ${emailId} as read`);
+            } finally {
+                lock.release();
+            }
+        } catch (error: any) {
+            logger.error(
+                `Failed to mark email ${emailId} as read: ${error.message}`,
+            );
         }
     }
 

@@ -1,0 +1,568 @@
+/* ── Onboarding Design Tokens ──────────────────────────── */
+:root {
+    --ob-bg-gradient-start: var(--color-neutral-50);
+    --ob-bg-gradient-end: #c3cfe2;
+    --ob-surface: var(--color-neutral-50);
+    --ob-surface-hover: var(--color-bg-hover);
+    --ob-border: var(--color-border);
+    --ob-text-heading: var(--color-text-primary);
+    --ob-text-body: var(--color-text-secondary);
+    --ob-text-muted: var(--color-neutral-400);
+    --ob-accent: var(--color-info-500);
+    --ob-accent-light: rgba(59, 130, 246, 0.1);
+    --ob-success-text: var(--color-success-600);
+    --ob-success-bg: var(--color-success-100);
+    --ob-card-success-border: var(--color-success-200);
+    --ob-guide-bg: var(--color-warning-50);
+    --ob-guide-border: var(--color-warning-200);
+    --ob-guide-text-heading: var(--color-warning-800);
+    --ob-guide-text: var(--color-warning-900);
+    --ob-guide-accent: var(--color-warning-300);
+    --ob-info-bg: var(--color-info-50);
+    --ob-info-border: var(--color-info-200);
+    --ob-input-focus-ring: rgba(59, 130, 246, 0.1);
+    --ob-error-bg: var(--color-danger-50);
+    --ob-error-border: var(--color-danger-200);
+    --ob-error-text: var(--color-danger-600);
+    --ob-progress-inactive: var(--color-border);
+    --ob-progress-active: var(--color-info-500);
+    --ob-progress-text-inactive: var(--color-neutral-400);
+    --ob-shadow-success: 0 0 16px rgba(34, 197, 94, 0.1);
+}
+
+.onboarding-container {
+    min-height: 100vh;
+    background: linear-gradient(
+        135deg,
+        var(--ob-bg-gradient-start) 0%,
+        var(--ob-bg-gradient-end) 100%
+    );
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-10) var(--space-5) 60px;
+}
+
+/* Progress bar */
+.onboarding-progress {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 48px;
+    padding: 0 var(--space-6);
+}
+
+.progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 14px;
+    color: var(--ob-text-muted);
+    transition: color var(--duration-slow);
+}
+
+.progress-step.active {
+    color: var(--ob-accent);
+}
+
+.progress-dot {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--ob-border);
+    color: var(--ob-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    transition: all var(--duration-slow);
+}
+
+.progress-step.active .progress-dot {
+    background: var(--ob-accent);
+    color: var(--color-bg-card);
+}
+
+.progress-line {
+    width: 80px;
+    height: 3px;
+    background: var(--ob-border);
+    margin: 0 var(--space-2);
+    margin-bottom: 28px;
+    border-radius: 2px;
+    transition: background var(--duration-slow);
+}
+
+.progress-step.active + .progress-line {
+    background: var(--ob-accent);
+}
+
+/* Content area */
+.onboarding-content {
+    width: 100%;
+    max-width: 700px;
+}
+
+.onboarding-step {
+    animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Hero section */
+.onboarding-hero {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.onboarding-logo {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 16px;
+}
+
+.onboarding-hero h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--ob-text-heading);
+    margin: 0 0 var(--space-2);
+}
+
+.onboarding-subtitle {
+    font-size: 18px;
+    color: var(--ob-text-body);
+    margin: 0;
+}
+
+/* Step headers */
+.onboarding-step h2 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--ob-text-heading);
+    margin: 0 0 var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.step3-title-icon {
+    color: var(--ob-accent);
+    flex-shrink: 0;
+}
+
+.onboarding-desc {
+    color: var(--ob-text-body);
+    font-size: 15px;
+    margin: 0 0 var(--space-6);
+    line-height: 1.6;
+}
+
+/* Feature list */
+.feature-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+    padding: var(--space-3);
+    background: var(--ob-surface);
+    border-radius: var(--radius-lg);
+    transition: background var(--duration-normal);
+}
+
+.feature-item:hover {
+    background: var(--ob-surface-hover);
+}
+
+.feature-icon {
+    color: var(--ob-text-body);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-lg);
+    background: var(--ob-border);
+}
+
+.feature-text strong {
+    display: block;
+    font-size: 15px;
+    color: var(--ob-text-heading);
+    margin-bottom: 4px;
+}
+
+.feature-text p {
+    font-size: 13px;
+    color: var(--ob-text-body);
+    margin: 0;
+}
+
+/* Bind list */
+.bind-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.bind-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    background: var(--ob-surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--ob-border);
+}
+
+.bind-icon {
+    color: var(--ob-text-body);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-lg);
+    background: var(--ob-border);
+}
+
+.bind-info {
+    flex: 1;
+}
+
+.bind-info strong {
+    display: block;
+    font-size: 15px;
+    color: var(--ob-text-heading);
+    margin-bottom: 4px;
+}
+
+.bind-info p {
+    font-size: 13px;
+    color: var(--ob-text-body);
+    margin: 0;
+}
+
+.bind-status-bound {
+    font-size: 13px;
+    color: var(--ob-success-text);
+    font-weight: 500;
+    background: var(--ob-success-bg);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-xl);
+    white-space: nowrap;
+}
+
+/* Ebridge URL input */
+.bind-ebridge-input {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--ob-info-bg);
+    border: 1px solid var(--ob-info-border);
+    border-radius: var(--radius-lg);
+}
+
+.ebridge-url-input {
+    width: 100%;
+    padding: 10px var(--space-3);
+    border: 1px solid var(--ob-border);
+    border-radius: var(--radius-lg);
+    font-size: 14px;
+    color: var(--ob-text-heading);
+    outline: none;
+    transition: border-color var(--duration-normal);
+    box-sizing: border-box;
+}
+
+.ebridge-url-input:focus {
+    border-color: var(--ob-accent);
+    box-shadow: 0 0 0 3px var(--ob-input-focus-ring);
+}
+
+.ebridge-url-input::placeholder {
+    color: var(--ob-text-muted);
+}
+
+.ebridge-input-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.ebridge-bound-note {
+    font-size: 13px;
+    color: var(--ob-success-text);
+    margin: 0;
+}
+
+/* Status dots */
+.status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.status-dot-online {
+    background: var(--color-success-500);
+}
+
+.status-dot-offline {
+    background: var(--ob-text-muted);
+}
+
+/* CalDAV Server section */
+.caldav-server-status {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.status-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.status-label {
+    font-weight: 600;
+    color: var(--ob-text-body);
+    font-size: 14px;
+}
+
+.status-badge {
+    font-size: 14px;
+    font-weight: 600;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-2xl);
+    display: inline-flex;
+    align-items: center;
+}
+
+.status-badge.enabled {
+    background: var(--ob-success-bg);
+    color: var(--ob-success-text);
+}
+
+.status-badge.disabled {
+    background: var(--ob-surface-hover);
+    color: var(--ob-text-muted);
+}
+
+.caldav-enable-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    align-items: flex-start;
+}
+
+.caldav-hint {
+    font-size: 14px;
+    color: var(--ob-text-body);
+    line-height: 1.6;
+    margin: 0;
+}
+
+.caldav-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.caldav-success-msg {
+    background: var(--color-success-50);
+    border: 1px solid var(--ob-card-success-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    font-size: 14px;
+    color: var(--color-success-800);
+    line-height: 1.5;
+}
+
+.caldav-field {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background: var(--ob-surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--ob-border);
+}
+
+.caldav-field-icon {
+    color: var(--ob-text-body);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.caldav-field-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.caldav-field-label {
+    font-size: 12px;
+    color: var(--ob-text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.caldav-field-value {
+    font-size: 13px;
+    color: var(--ob-text-heading);
+    background: var(--ob-border);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    word-break: break-all;
+    font-family: "SF Mono", "Fira Code", monospace;
+}
+
+.caldav-password {
+    letter-spacing: 3px;
+}
+
+.copy-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ob-text-muted);
+    padding: 6px;
+    border-radius: var(--radius-md);
+    transition: all var(--duration-normal);
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.copy-btn:hover {
+    color: var(--ob-accent);
+    background: var(--color-primary-50);
+}
+
+/* CalDAV guide */
+.caldav-guide {
+    background: var(--ob-guide-bg);
+    border: 1px solid var(--ob-guide-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    margin-top: 4px;
+}
+
+.caldav-guide h4 {
+    margin: 0 0 10px;
+    font-size: 15px;
+    color: var(--ob-guide-text-heading);
+    display: flex;
+    align-items: center;
+}
+
+.caldav-guide ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.caldav-guide li {
+    font-size: 13px;
+    color: var(--ob-guide-text);
+    line-height: 1.5;
+    padding-left: 8px;
+    border-left: 3px solid var(--ob-guide-accent);
+}
+
+.caldav-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
+/* Onboarding actions */
+.onboarding-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-top: 32px;
+}
+
+.onboarding-error {
+    background: var(--ob-error-bg);
+    border: 1px solid var(--ob-error-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    color: var(--ob-error-text);
+    font-size: 14px;
+    margin-top: 16px;
+}
+
+/* Card success variant */
+.card-success {
+    border: 2px solid var(--ob-card-success-border) !important;
+    box-shadow: var(--ob-shadow-success) !important;
+}
+
+/* Animation for loading spinner */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .onboarding-container {
+        padding: var(--space-6) var(--space-4) var(--space-10);
+    }
+
+    .onboarding-progress {
+        margin-bottom: 32px;
+    }
+
+    .progress-line {
+        width: 40px;
+    }
+
+    .onboarding-hero h1 {
+        font-size: 26px;
+    }
+
+    .onboarding-step h2 {
+        font-size: 20px;
+    }
+
+    .onboarding-actions {
+        flex-direction: column;
+    }
+}

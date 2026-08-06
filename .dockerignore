@@ -5,4 +5,4 @@ server/dist
 .vscode
 logs
 *.log
-users.db
+private/users.db

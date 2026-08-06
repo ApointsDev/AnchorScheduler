@@ -12,9 +12,10 @@ describe('GraphColoring Algorithm', () => {
   });
 
   test('should assign colors without conflicts for simple case', async () => {
+    const deadline = timeSlots[timeSlots.length - 1].end;
     const tasks: DDLTask[] = [
-      { id: 't1', name: 'Task 1', estimatedDuration: 60, deadline: new Date('2025-12-14T12:00:00') },
-      { id: 't2', name: 'Task 2', estimatedDuration: 60, deadline: new Date('2025-12-14T12:00:00') }
+      { id: 't1', name: 'Task 1', estimatedDuration: 60, deadline },
+      { id: 't2', name: 'Task 2', estimatedDuration: 60, deadline }
     ];
     const fixedEvents: FixedEvent[] = [];
 
@@ -41,7 +42,12 @@ describe('GraphColoring Algorithm', () => {
     }];
 
     const tasks: DDLTask[] = [
-      { id: 't1', name: 'Task 1', estimatedDuration: 60, deadline: new Date('2025-12-14T12:00:00') }
+      {
+        id: 't1',
+        name: 'Task 1',
+        estimatedDuration: 60,
+        deadline: timeSlots[timeSlots.length - 1].end,
+      }
     ];
 
     const input: ColoringInput = {
@@ -59,11 +65,12 @@ describe('GraphColoring Algorithm', () => {
   });
 
   test('should report conflict if no slots available', async () => {
+    const deadline = timeSlots[timeSlots.length - 1].end;
     const tasks: DDLTask[] = [
-      { id: 't1', name: 'Task 1', estimatedDuration: 60, deadline: new Date('2025-12-14T12:00:00') },
-      { id: 't2', name: 'Task 2', estimatedDuration: 60, deadline: new Date('2025-12-14T12:00:00') },
-      { id: 't3', name: 'Task 3', estimatedDuration: 60, deadline: new Date('2025-12-14T12:00:00') },
-      { id: 't4', name: 'Task 4', estimatedDuration: 60, deadline: new Date('2025-12-14T12:00:00') }
+      { id: 't1', name: 'Task 1', estimatedDuration: 60, deadline },
+      { id: 't2', name: 'Task 2', estimatedDuration: 60, deadline },
+      { id: 't3', name: 'Task 3', estimatedDuration: 60, deadline },
+      { id: 't4', name: 'Task 4', estimatedDuration: 60, deadline }
     ];
     // Only 3 slots available
     const input: ColoringInput = {

@@ -1,70 +1,94 @@
-import React from 'react';
-import { Card } from '../ui/Card';
-import { Clock, MapPin } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
-import '../../styles/Schedule.css';
+import React from "react";
+import { MapPin } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import "../../styles/Schedule.css";
 
 export interface ScheduleCardProps {
-  name: string;
-  description?: string;
-  startTime: string;
-  endTime: string;
-  location?: string;
-  status?: 'active' | 'completed' | 'overdue' | 'upcoming';
-  onClick?: () => void;
-  rightActions?: React.ReactNode;
-  className?: string;
+    name: string;
+    description?: string;
+    startTime: string;
+    endTime: string;
+    location?: string;
+    status?: "active" | "completed" | "overdue" | "upcoming";
+    progress?: number; // 0–100 elapsed percentage for active tasks
+    onClick?: () => void;
+    rightActions?: React.ReactNode;
+    className?: string;
 }
 
-const getStatusColor = (status?: string) => {
-  switch (status) {
-    case 'completed': return 'status-completed';
-    case 'active': return 'status-active';
-    case 'overdue': return 'status-overdue';
-    case 'upcoming': return 'status-upcoming';
-    default: return '';
-  }
-};
-
 const ScheduleCard: React.FC<ScheduleCardProps> = ({
-  name,
-  description,
-  startTime,
-  endTime,
-  location,
-  status,
-  onClick,
-  rightActions,
-  className = '',
+    name,
+    description,
+    startTime,
+    endTime,
+    location,
+    status = "upcoming",
+    progress,
+    onClick,
+    rightActions,
+    className = "",
 }) => {
-  return (
-    // reuse existing .task-card styles for consistent appearance in timeline
-    <Card className={`task-card ${getStatusColor(status)} ${className}`} onClick={onClick}>
-      <div className="task-header">
-        <h3>{name}</h3>
-        {rightActions && (
-          <div className="task-actions" onClick={(e) => e.stopPropagation()}>
-            {rightActions}
-          </div>
-        )}
-      </div>
+    const isCompleted = status === "completed";
+    const isActive = status === "active";
+    const dividerColored = isCompleted || (isActive && progress !== undefined);
 
-      {description && <p className="task-desc">{description}</p>}
+    let dividerStyle: React.CSSProperties = {};
+    if (isCompleted) {
+        dividerStyle = {
+            background: `repeating-linear-gradient(to bottom, var(--color-success-400) 0px, var(--color-success-400) 5px, transparent 5px, transparent 10px)`,
+        };
+    } else if (isActive && progress !== undefined) {
+        const pct = Math.min(100, Math.max(0, progress));
+        dividerStyle = {
+            background: `linear-gradient(to bottom, var(--color-primary) ${pct}%, transparent ${pct}%)`,
+        };
+    }
 
-      <div className="task-meta">
-        {location && (
-          <span className="meta-item">
-            <MapPin size={14} /> {location}
-          </span>
-        )}
-        <span className="meta-item">
-          <Clock size={14} /> {format(parseISO(startTime), 'HH:mm')} - {format(parseISO(endTime), 'HH:mm')}
-        </span>
-      </div>
+    return (
+        <div className={`ios-card ${className}`} onClick={onClick}>
+            <div className="ios-card-left">
+                <span className="ios-card-time">
+                    {format(parseISO(startTime), "HH:mm")}
+                </span>
+                <span className="ios-card-time-end">
+                    {format(parseISO(endTime), "HH:mm")}
+                </span>
+            </div>
 
-      {/* Remove footer placement; actions are now in header to the right of title */}
-    </Card>
-  );
+            <div
+                className={`ios-card-divider ${dividerColored ? "divider-colored" : ""}`}
+                style={dividerStyle}
+            />
+
+            <div className="ios-card-right">
+                <h3
+                    className="ios-card-title"
+                    style={{
+                        opacity: isCompleted ? 0.45 : 1,
+                        textDecoration: isCompleted ? "line-through" : "none",
+                    }}
+                >
+                    {name}
+                </h3>
+                {description && <p className="ios-card-desc">{description}</p>}
+                {location && (
+                    <span className="ios-card-location">
+                        <MapPin size={12} />
+                        {location}
+                    </span>
+                )}
+            </div>
+
+            {rightActions && (
+                <div
+                    className="ios-card-actions"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {rightActions}
+                </div>
+            )}
+        </div>
+    );
 };
 
 export default ScheduleCard;

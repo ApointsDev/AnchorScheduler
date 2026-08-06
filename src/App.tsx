@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { WeekProvider } from "./context/WeekContext";
 import {
     BrowserRouter as Router,
@@ -6,11 +7,18 @@ import {
     Route,
     Navigate,
 } from "react-router-dom";
-import { isAuthenticated, removeToken, authEvents } from "./services/api";
+import {
+    isAuthenticated,
+    removeToken,
+    authEvents,
+    getOnboardingStatus,
+    setOnboardingCompleted,
+} from "./services/api";
 import { checkAdmin } from "./services/adminApi";
 import Login from "./components/Login";
-import Register from "./components/Register";
 import Dashboard from "./components/Dashboard";
+import LoadingSpinner from "./components/ui/LoadingSpinner";
+import ShareView from "./components/Share/ShareView";
 import { Modal } from "./components/ui/Modal";
 import { Button } from "./components/ui/Button";
 import "./App.css";
@@ -19,15 +27,14 @@ import Onboarding from "./components/Onboarding";
 import AdminPanel from "./components/Admin/AdminPanel";
 
 function App() {
+    const { t } = useTranslation();
     const [isAuth, setIsAuth] = useState<boolean>(isAuthenticated());
     const [isAdmin, setIsAdmin] = useState<boolean>(false);
     const [isCheckingAuth, setIsCheckingAuth] =
         useState<boolean>(isAuthenticated());
     const [showSessionExpiredModal, setShowSessionExpiredModal] =
         useState(false);
-    const [showOnboarding, setShowOnboarding] = useState(() => {
-        return !localStorage.getItem("onboarding_completed");
-    });
+    const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
 
     useEffect(() => {
         const handleUnauthorized = () => {
@@ -42,6 +49,11 @@ function App() {
                 .then(setIsAdmin)
                 .catch(() => setIsAdmin(false))
                 .finally(() => setIsCheckingAuth(false));
+
+            // 从数据库加载引导页完成状态（替代 localStorage）
+            getOnboardingStatus().then((completed) => {
+                if (!completed) setShowOnboarding(true);
+            });
         } else {
             setIsCheckingAuth(false);
         }
@@ -63,6 +75,11 @@ function App() {
         } finally {
             setIsCheckingAuth(false);
         }
+
+        // 从数据库加载引导页完成状态
+        getOnboardingStatus().then((completed) => {
+            if (!completed) setShowOnboarding(true);
+        });
     };
 
     const handleLogout = () => {
@@ -72,7 +89,7 @@ function App() {
     };
 
     const handleOnboardingComplete = () => {
-        localStorage.setItem("onboarding_completed", "true");
+        setOnboardingCompleted(true);
         setShowOnboarding(false);
     };
 
@@ -94,7 +111,7 @@ function App() {
                         height: "100vh",
                     }}
                 >
-                    <p>加载中…</p>
+                    <LoadingSpinner />
                 </div>
             </Router>
         );
@@ -118,17 +135,10 @@ function App() {
                                 )
                             }
                         />
+                        {/* 注册已禁用 — 仅允许 CAF 登录，/register 重定向到 /login */}
                         <Route
                             path="/register"
-                            element={
-                                !isAuth ? (
-                                    <Register
-                                        onRegisterSuccess={handleLoginSuccess}
-                                    />
-                                ) : (
-                                    <Navigate to="/" />
-                                )
-                            }
+                            element={<Navigate to="/login" replace />}
                         />
 
                         <Route
@@ -138,7 +148,7 @@ function App() {
                                     showOnboarding ? (
                                         <Navigate to="/onboarding" />
                                     ) : (
-                                        <Navigate to="/dashboard" />
+                                        <Navigate to="/schedule/today" />
                                     )
                                 ) : (
                                     <Navigate to="/login" />
@@ -249,6 +259,19 @@ function App() {
                             }
                         />
                         <Route
+                            path="/mail"
+                            element={
+                                isAuth ? (
+                                    <Dashboard
+                                        onLogout={handleLogout}
+                                        view="mail"
+                                    />
+                                ) : (
+                                    <Navigate to="/login" />
+                                )
+                            }
+                        />
+                        <Route
                             path="/admin"
                             element={
                                 isAuth && isAdmin ? (
@@ -258,6 +281,8 @@ function App() {
                                 )
                             }
                         />
+
+                        <Route path="/share/:token" element={<ShareView />} />
 
                         <Route
                             path="*"
@@ -273,11 +298,11 @@ function App() {
 
                     <Modal
                         isOpen={showSessionExpiredModal}
-                        onClose={() => {}} // Prevent closing by clicking outside
-                        title="会话已过期"
+                        onClose={() => {}}
+                        title={t("app.sessionExpired")}
                         closeOnOverlayClick={false}
                     >
-                        <p>您的登录会话已过期，请重新登录。</p>
+                        <p>{t("app.sessionExpiredDesc")}</p>
                         <div
                             style={{
                                 marginTop: "20px",
@@ -286,7 +311,7 @@ function App() {
                             }}
                         >
                             <Button onClick={handleSessionExpired}>
-                                重新登录
+                                {t("app.relogin")}
                             </Button>
                         </div>
                     </Modal>

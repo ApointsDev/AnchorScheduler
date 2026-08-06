@@ -1,0 +1,60 @@
+/* ── Theme Switcher ─────────────────────────────────────── */
+
+.theme-switcher {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--color-bg-hover);
+    border-radius: var(--radius-lg);
+    transition: background var(--duration-normal);
+}
+
+.theme-switcher:hover {
+    background: var(--color-bg-card);
+}
+
+.theme-switcher-icon {
+    color: var(--color-text-tertiary);
+    flex-shrink: 0;
+}
+
+.theme-switcher-select {
+    background: transparent;
+    border: none;
+    color: var(--color-text-primary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    padding: 2px 0;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.theme-switcher-select:focus {
+    color: var(--color-brand-primary);
+}
+
+.theme-switcher-select option {
+    background: var(--color-bg-card);
+    color: var(--color-text-primary);
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+    .theme-switcher {
+        padding: 2px 8px;
+        gap: 4px;
+    }
+
+    .theme-switcher-icon {
+        width: 14px;
+        height: 14px;
+    }
+
+    .theme-switcher-select {
+        font-size: 0.75rem;
+    }
+}

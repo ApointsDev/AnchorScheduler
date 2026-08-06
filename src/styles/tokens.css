@@ -1,0 +1,414 @@
+/* ═══════════════════════════════════════════════════════════
+   DESIGN TOKENS
+   Replaces src/styles/variables.css
+   Single source of truth for all visual primitives
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+    /* ───────────────────────────────────────────────────────
+     1. BRAND / PRIMARY COLORS (10-stop scale)
+     Base: #467ee5 at 500
+     ─────────────────────────────────────────────────────── */
+    --color-primary-50: #eef3ff;
+    --color-primary-100: #dce7fd;
+    --color-primary-200: #b9cffb;
+    --color-primary-300: #96b7f9;
+    --color-primary-400: #739ff7;
+    --color-primary-500: #467ee5;
+    --color-primary-600: #3765b7;
+    --color-primary-700: #294c8b;
+    --color-primary-800: #1b325e;
+    --color-primary-900: #0d1931;
+
+    /* ───────────────────────────────────────────────────────
+     2. NEUTRAL / GRAY COLORS (10-stop scale)
+     Based on Tailwind-inspired gray palette
+     ─────────────────────────────────────────────────────── */
+    --color-neutral-50: #f9fafb;
+    --color-neutral-100: #f3f4f6;
+    --color-neutral-200: #e5e7eb;
+    --color-neutral-300: #d1d5db;
+    --color-neutral-400: #9ca3af;
+    --color-neutral-500: #6b7280;
+    --color-neutral-600: #4b5568;
+    --color-neutral-700: #374151;
+    --color-neutral-800: #1f2937;
+    --color-neutral-900: #111827;
+
+    /* ───────────────────────────────────────────────────────
+     3. STATUS COLORS (5-stop scales)
+     ─────────────────────────────────────────────────────── */
+
+    /* Success — Green */
+    --color-success-50: #ecfdf5;
+    --color-success-100: #d1fae5;
+    --color-success-200: #a7f3d0;
+    --color-success-300: #6ee7b7;
+    --color-success-400: #34d399;
+    --color-success-500: #10b981;
+    --color-success-600: #059669;
+    --color-success-700: #047857;
+    --color-success-800: #065f46;
+    --color-success-900: #064e3b;
+
+    /* Danger — Red */
+    --color-danger-50: #fef2f2;
+    --color-danger-100: #fee2e2;
+    --color-danger-200: #fecaca;
+    --color-danger-300: #fca5a5;
+    --color-danger-400: #f87171;
+    --color-danger-500: #ef4444;
+    --color-danger-600: #dc2626;
+    --color-danger-700: #b91c1c;
+    --color-danger-800: #991b1b;
+    --color-danger-900: #7f1d1d;
+
+    /* Warning — Orange */
+    --color-warning-50: #fffbeb;
+    --color-warning-100: #fff7ed;
+    --color-warning-200: #ffedd5;
+    --color-warning-300: #fed7aa;
+    --color-warning-400: #fdba74;
+    --color-warning-500: #f97316;
+    --color-warning-600: #ea580c;
+    --color-warning-700: #c2410c;
+    --color-warning-800: #9a3412;
+    --color-warning-900: #7c2d12;
+
+    /* Info — Blue */
+    --color-info-50: #eff6ff;
+    --color-info-100: #dbeafe;
+    --color-info-200: #bfdbfe;
+    --color-info-300: #93c5fd;
+    --color-info-400: #60a5fa;
+    --color-info-500: #3b82f6;
+    --color-info-600: #2563eb;
+    --color-info-700: #1d4ed8;
+    --color-info-800: #1e40af;
+    --color-info-900: #1e3a8a;
+
+    /* ───────────────────────────────────────────────────────
+     4. SEMANTIC COLOR ALIASES
+     Maps semantic roles → scales above
+     ─────────────────────────────────────────────────────── */
+
+    /* Surfaces */
+    --color-surface-primary: var(--color-neutral-50);
+    --color-surface-secondary: var(--color-neutral-100);
+    --color-surface-card: #ffffff;
+    --color-surface-overlay: rgba(0, 0, 0, 0.5);
+
+    /* Text */
+    --color-text-primary: var(--color-neutral-800);
+    --color-text-secondary: var(--color-neutral-600);
+    --color-text-tertiary: var(--color-neutral-400);
+    --color-text-inverse: #ffffff;
+
+    /* Borders */
+    --color-border-default: var(--color-neutral-200);
+    --color-border-subtle: var(--color-neutral-100);
+    --color-border-strong: var(--color-neutral-300);
+
+    /* Brand */
+    --color-brand-primary: var(--color-primary-500);
+    --color-brand-primary-hover: var(--color-primary-600);
+    --color-brand-primary-active: var(--color-primary-700);
+
+    /* ───────────────────────────────────────────────────────
+     5. SPACING TOKENS (4px base)
+     ─────────────────────────────────────────────────────── */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+
+    /* ───────────────────────────────────────────────────────
+     6. BORDER RADIUS
+     ─────────────────────────────────────────────────────── */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+    --radius-2xl: 16px;
+    --radius-full: 9999px;
+
+    /* ───────────────────────────────────────────────────────
+     7. SHADOWS
+     ─────────────────────────────────────────────────────── */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+    --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.15);
+
+    /* ───────────────────────────────────────────────────────
+     8. TYPOGRAPHY
+     ─────────────────────────────────────────────────────── */
+    --font-size-xs: 0.7rem; /* ~11px */
+    --font-size-sm: 0.8rem; /* ~13px */
+    --font-size-base: 0.875rem; /* ~14px */
+    --font-size-lg: 1rem; /* ~16px */
+    --font-size-xl: 1.15rem; /* ~18px */
+    --font-size-2xl: 1.25rem; /* ~20px */
+    --font-size-3xl: 1.5rem; /* ~24px */
+
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    --line-height-tight: 1.25;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.7;
+
+    /* ───────────────────────────────────────────────────────
+     9. ANIMATION DURATIONS
+     ─────────────────────────────────────────────────────── */
+    --duration-fast: 0.15s;
+    --duration-normal: 0.2s;
+    --duration-slow: 0.3s;
+
+    /* ───────────────────────────────────────────────────────
+     10. Z-INDEX SCALE
+     ─────────────────────────────────────────────────────── */
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-modal-backdrop: 1000;
+    --z-modal: 1001;
+    --z-tooltip: 1100;
+
+    /* ───────────────────────────────────────────────────────
+     11. BREAKPOINTS
+     ─────────────────────────────────────────────────────── */
+    --breakpoint-xs: 480px;
+    --breakpoint-sm: 640px;
+    --breakpoint-md: 768px;
+    --breakpoint-lg: 1024px;
+
+    /* ───────────────────────────────────────────────────────
+     12. LAYOUT
+     ─────────────────────────────────────────────────────── */
+    --container-max-width: 1100px;
+    --settings-max-width: 900px;
+
+    /* ═══════════════════════════════════════════════════════════
+     BACKWARD COMPATIBILITY LAYER
+     Aliases so all existing CSS references continue to work
+     ═══════════════════════════════════════════════════════════ */
+
+    /* ── Primary / Brand ──────────────────────────────────── */
+    --color-primary: var(--color-brand-primary);
+    --color-primary-light: var(--color-primary-400);
+    --color-primary-active-border: var(--color-primary-600);
+
+    /* ── Text ─────────────────────────────────────────────── */
+    --color-text-dark: var(--color-text-primary);
+    --color-text-medium: var(--color-text-secondary);
+    --color-text-light: var(--color-text-tertiary);
+
+    /* ── Backgrounds ──────────────────────────────────────── */
+    --color-bg-light: var(--color-surface-primary);
+    --color-bg-hover: var(--color-surface-secondary);
+    --color-bg-card: var(--color-surface-card);
+
+    /* ── Borders ──────────────────────────────────────────── */
+    --color-border: var(--color-border-default);
+
+    /* ── Common ───────────────────────────────────────────── */
+    --color-white: #ffffff; /* always white, never inverted */
+
+    /* ── Status Aliases ───────────────────────────────────── */
+    --color-success: var(--color-success-500);
+    --color-danger: var(--color-danger-500);
+    --color-danger-dark: var(--color-danger-600);
+    --color-danger-light: var(--color-danger-100);
+    --color-warning: var(--color-warning-500);
+    --color-info: var(--color-info-500);
+
+    /* ── Gradient ─────────────────────────────────────────── */
+    --color-gradient-start: var(--color-primary-400);
+    --color-gradient-end: var(--color-primary-600);
+
+    /* ── Button Active States ─────────────────────────────── */
+    --color-primary-active: var(--color-primary-600);
+    --color-secondary-active: #cbd5e0;
+    --color-outline-active: #e2e8f0;
+    --color-ghost-active: #e2e8f0;
+    --color-danger-active: var(--color-danger-700);
+
+    /* ── Component: Log Viewer ────────────────────────────── */
+    --color-log-payload-bg: #2d2d2d;
+    --color-log-payload-text: #e0e0e0;
+    --color-log-payload-link: #0066cc;
+
+    /* ── Component: Timeline ──────────────────────────────── */
+    --color-timeline-line: #eee;
+    --color-timeline-dot: #ddd;
+    --color-timeline-dot-active: #0066cc;
+    --color-timeline-dot-active-shadow: #cce0ff;
+    --color-timeline-dot-completed: #22c55e;
+    --color-timeline-dot-completed-shadow: #bbf7d0;
+    --color-timeline-dot-overdue: #ef4444;
+    --color-timeline-dot-overdue-shadow: #fecaca;
+
+    /* ── Component: Task Cards ────────────────────────────── */
+    --color-task-card-active-bg: #f0f7ff;
+    --color-task-card-upcoming-border: #9ca3af;
+
+    /* ── Component: Mini Tasks ────────────────────────────── */
+    --color-mini-task-bg: #e0f2fe;
+    --color-mini-task-text: #0369a1;
+    --color-mini-task-time: #0284c7;
+
+    /* ── Component: AI Chat ───────────────────────────────── */
+    --color-chat-user-bg: var(--color-info-500);
+    --color-chat-assistant-bg: #f1f5f9;
+    --color-chat-assistant-text: #334155;
+    --color-chat-tool-header: #64748b;
+    --color-chat-tool-output-bg: #1e293b;
+    --color-chat-tool-output-text: #e2e8f0;
+    --color-chat-loading-dot: #cbd5e1;
+
+    /* ── Component: Quadrant View (qd-*) ──────────────────── */
+    --qd-bg-panel: #f5f3ef;
+    --qd-border-panel: #e8e4dc;
+    --qd-border-dashed: #d4d0c8;
+    --qd-text-heading: #4a4540;
+    --qd-text-muted: #8b8680;
+    --qd-text-content: #3d3730;
+    --qd-text-time: #756b60;
+    --qd-bg-note-default: #fffde7;
+    --qd-bg-note-q1: #fce4e4;
+    --qd-bg-note-q2: #e3f0fc;
+    --qd-bg-note-q3: #fff9c4;
+    --qd-bg-note-q4: #e8f5e9;
+    --qd-border-accent-q1: #e57373;
+    --qd-border-accent-q2: #64b5f6;
+    --qd-border-accent-q3: #ffb74d;
+    --qd-border-accent-q4: #81c784;
+    --qd-empty-text: #b5b0a8;
+    --qd-pin-light: #f0e0d0;
+    --qd-pin-dark: #c0392b;
+
+    /* ═══════════════════════════════════════════════════════════
+     PREVIOUSLY MISSING VARIABLES (now defined)
+     These were referenced but never declared in variables.css
+     ═══════════════════════════════════════════════════════════ */
+
+    /* Semantically mapped */
+    --color-text-primary: var(--color-neutral-800); /* replaces fallback #333 */
+    --color-text-secondary: var(
+        --color-neutral-600
+    ); /* replaces fallback #666 */
+    --color-bg-white: var(--color-surface-card); /* white background */
+    --color-text: var(--color-neutral-700); /* used in pivot labels */
+    --color-bg-subtle: var(--color-neutral-100); /* used in pivot cells */
+    --color-success-bg: var(--color-success-100); /* success background */
+    --color-bg-secondary: var(
+        --color-neutral-100
+    ); /* secondary bg (day view) */
+    --color-border-light: var(--color-neutral-100); /* light grid lines */
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DARK THEME OVERRIDES
+   ═══════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] {
+    /* Surfaces — 反转明暗 */
+    --color-surface-primary: #0f172a;
+    --color-surface-secondary: #1e293b;
+    --color-surface-card: #1e293b;
+    --color-surface-overlay: rgba(0, 0, 0, 0.7);
+
+    /* Text — 反转 */
+    --color-text-primary: #f1f5f9;
+    --color-text-secondary: #94a3b8;
+    --color-text-tertiary: #64748b;
+    --color-text-inverse: #0f172a;
+
+    /* Borders — 暗色 */
+    --color-border-default: #334155;
+    --color-border-subtle: #1e293b;
+    --color-border-strong: #475569;
+
+    /* Brand — 略微调亮 */
+    --color-brand-primary: #60a5fa;
+    --color-brand-primary-hover: #93bbfd;
+    --color-brand-primary-active: #3b82f6;
+
+    /* 状态色 — 暗色模式下调高亮度 */
+    --color-success-500: #34d399;
+    --color-success-600: #10b981;
+    --color-success-700: #059669;
+    --color-success-800: #047857;
+    --color-danger-500: #f87171;
+    --color-danger-600: #ef4444;
+    --color-danger-700: #dc2626;
+    --color-danger-800: #b91c1c;
+    --color-warning-500: #fbbf24;
+    --color-warning-600: #f59e0b;
+    --color-warning-700: #d97706;
+    --color-warning-800: #b45309;
+    --color-info-500: #60a5fa;
+    --color-info-600: #3b82f6;
+    --color-info-700: #2563eb;
+    --color-info-800: #1d4ed8;
+
+    /* 组件令牌覆盖 */
+    --color-log-payload-bg: #1a1a2e;
+    --color-log-payload-text: #cbd5e1;
+    --color-log-payload-link: #60a5fa;
+    --color-chat-user-bg: #3b82f6;
+    --color-chat-assistant-bg: #1e293b;
+    --color-chat-assistant-text: #e2e8f0;
+    --color-chat-tool-output-bg: #0f172a;
+    --color-chat-tool-output-text: #cbd5e1;
+    --color-chat-loading-dot: #475569;
+    --color-task-card-active-bg: #1e293b;
+    --color-task-card-upcoming-border: #64748b;
+
+    /* Scale backgrounds — invert light tints to dark tones */
+    --color-primary-50: #1a2744;
+    --color-primary-100: #1e3056;
+    --color-neutral-50: #1e293b;
+    --color-neutral-100: #334155;
+    --color-neutral-200: #475569;
+    --color-neutral-300: #475569;
+    --color-neutral-400: #64748b;
+    --color-neutral-500: #94a3b8;
+    --color-neutral-600: #cbd5e1;
+    --color-neutral-700: #e2e8f0;
+    --color-success-50: #0a2e1a;
+    --color-success-100: #14532d;
+    --color-success-200: #166534;
+    --color-danger-50: #2e1515;
+    --color-danger-100: #450a0a;
+    --color-danger-200: #7f1d1d;
+    --color-warning-50: #2e2000;
+    --color-warning-100: #451a03;
+    --color-warning-200: #78350f;
+    --color-info-50: #0c1929;
+    --color-info-100: #1e3050;
+    --color-info-200: #1e3a5f;
+
+    /* Component tokens — dark mode adjustments */
+    --color-timeline-line: #334155;
+    --color-timeline-dot: #475569;
+    --color-timeline-dot-active: #60a5fa;
+    --color-timeline-dot-active-shadow: #1e3056;
+    --color-timeline-dot-completed-shadow: #14532d;
+    --color-timeline-dot-overdue-shadow: #450a0a;
+    --color-secondary-active: #475569;
+    --color-outline-active: #334155;
+    --color-ghost-active: #334155;
+    --color-mini-task-bg: #1e3050;
+    --color-mini-task-text: #93c5fd;
+    --color-mini-task-time: #60a5fa;
+
+    /* 向后兼容别名在暗色模式下会通过语义令牌自动继承 */
+}

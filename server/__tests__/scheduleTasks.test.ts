@@ -48,7 +48,11 @@ describe('AlgorithmService - scheduleTasks', () => {
       slotDuration: 60
     });
 
-    const scheduledFlexible = result.scheduledTasks.find(t => t.id === 'flexible-1');
+    // Flexible tasks are materialized as a scheduled child occurrence with a
+    // new ID; parentTaskId preserves the source task identity.
+    const scheduledFlexible = result.scheduledTasks.find(
+      t => t.parentTaskId === 'flexible-1',
+    );
     const scheduledFixed = result.scheduledTasks.find(t => t.id === 'fixed-1');
 
     // Fixed task should remain unchanged
@@ -56,6 +60,8 @@ describe('AlgorithmService - scheduleTasks', () => {
     expect(scheduledFixed.endTime).toBe(fixedEnd.toISOString());
 
     // Flexible task should be scheduled
+    expect(scheduledFlexible).toBeDefined();
+    expect(scheduledFlexible.id).not.toBe('flexible-1');
     expect(scheduledFlexible.startTime).not.toBe(ddlDue.toISOString()); // Should be moved
     const flexStart = new Date(scheduledFlexible.startTime);
     const flexEnd = new Date(scheduledFlexible.endTime);

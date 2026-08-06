@@ -1,0 +1,215 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Route registration contract (snapshot-based) adminRoutes.ts should have all expected routes registered 1`] = `
+[
+  "DELETE /users/:id",
+  "GET /check",
+  "GET /fields",
+  "GET /users",
+  "GET /users/:id",
+  "GET /users/:id/schedule",
+  "PATCH /users/:id",
+  "POST /cache/refresh",
+  "POST /users",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) algorithmRoutes.ts should have all expected routes registered 1`] = `
+[
+  "POST /analyze-energy",
+  "POST /community-detection",
+  "POST /critical-path",
+  "POST /optimize-schedule",
+  "POST /schedule-meeting",
+  "POST /schedule-tasks",
+  "POST /schedule-team-tasks",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) apiRoutes.ts should have all expected routes registered 1`] = `
+[
+  "DELETE /caldav/config",
+  "DELETE /chat/contexts/:id",
+  "DELETE /share/:token",
+  "DELETE /sync/timetable",
+  "DELETE /tasks/:id",
+  "GET /caldav-server/status",
+  "GET /caldav/calendars",
+  "GET /caldav/status",
+  "GET /chat/contexts",
+  "GET /chat/contexts/:id",
+  "GET /chat/history",
+  "GET /emails",
+  "GET /emails/:emailId",
+  "GET /emails/search",
+  "GET /logs",
+  "GET /me",
+  "GET /schedule-queue",
+  "GET /settings/onboarding",
+  "GET /settings/week",
+  "GET /share/list",
+  "GET /share/view/:token",
+  "GET /tasks",
+  "GET /tasks/:id",
+  "GET /tasks/:id/occurrences",
+  "GET /tasks/parents",
+  "PATCH /me/signature",
+  "PATCH /tasks/:id",
+  "PATCH /tasks/:id/priority-axes",
+  "POST /bind/imap",
+  "POST /caldav-server/client-profile",
+  "POST /caldav-server/disable",
+  "POST /caldav-server/enable",
+  "POST /caldav/config",
+  "POST /caldav/sync",
+  "POST /chat/contexts",
+  "POST /chat/history",
+  "POST /chat/undo",
+  "POST /emails/:emailId/ai-process",
+  "POST /llm/chat",
+  "POST /me/avatar",
+  "POST /me/signature",
+  "POST /schedule-queue/:id/approve",
+  "POST /schedule-queue/:id/reject",
+  "POST /settings/auto-schedule-promotions",
+  "POST /settings/conflict-mode",
+  "POST /settings/onboarding",
+  "POST /settings/strip-reply-prefix",
+  "POST /settings/week",
+  "POST /share/create",
+  "POST /status/ebridge",
+  "POST /status/microsoft-todo",
+  "POST /sync/timetable",
+  "POST /tasks",
+  "POST /tasks/batch",
+  "POST /tasks/classify-quadrants",
+  "POST /tasks/conflicts",
+  "POST /unbind/exchange",
+  "POST /unbind/imap",
+  "PUT /emails/:emailId/read",
+  "PUT /me/signature",
+  "PUT /tasks/:id",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) authRoutes.ts should have all expected routes registered 1`] = `
+[
+  "GET /api/auth/caf/authorize-url",
+  "GET /auth/caf",
+  "GET /auth/caf/callback",
+  "GET /auth/exchange",
+  "GET /auth/exchange/callback",
+  "POST /api/auth/caf/token",
+  "POST /auth/imap/bind",
+  "POST /auth/imap/unbind",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) caldavServerRoutes.ts should have all expected routes registered 1`] = `
+[
+  "ALL /*",
+  "GET /.well-known/caldav",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) chaoxingRoutes.ts should have all expected routes registered 1`] = `
+[
+  "DELETE /chaoxing/bind",
+  "GET /chaoxing/status",
+  "PATCH /chaoxing/settings",
+  "POST /chaoxing/sync",
+  "PUT /chaoxing/bind",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) communityRoutes.ts should have all expected routes registered 1`] = `
+[
+  "GET /community/me",
+  "GET /community/rankings/avg-complete-duration",
+  "GET /community/rankings/completed-this-week",
+  "GET /community/rankings/completion-hour-mode",
+  "GET /community/rankings/incomplete-this-week",
+  "GET /community/rankings/metrics",
+  "GET /community/rankings/top100",
+  "GET /community/regions",
+  "POST /community/regions",
+  "PUT /community/me/region",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) doubaoRoutes.ts should have all expected routes registered 1`] = `
+[
+  "GET /status",
+  "POST /chat",
+  "POST /chat/text",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) ebridgeRoutes.ts should have all expected routes registered 1`] = `
+[
+  "ALL /proxy/*",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) followRoutes.ts should have all expected routes registered 1`] = `
+[
+  "DELETE /users/:userId/follow",
+  "GET /users/:userId/follow/status",
+  "GET /users/:userId/followers",
+  "GET /users/:userId/following",
+  "POST /users/:userId/follow",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) rejectionBufferRoutes.ts should have all expected routes registered 1`] = `
+[
+  "GET /rejection-buffer",
+  "GET /rejection-buffer/schedules",
+  "GET /rejection-buffer/todos",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) speechRoutes.ts should have all expected routes registered 1`] = `
+[
+  "GET /status",
+  "POST /recognize",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) todoRoutes.ts should have all expected routes registered 1`] = `
+[
+  "DELETE /tags/:id",
+  "DELETE /todos/:id",
+  "GET /tags",
+  "GET /tags/:id",
+  "GET /tags/:id/todos",
+  "GET /todo-queue",
+  "GET /todos",
+  "GET /todos/:id",
+  "PATCH /tags/:id",
+  "PATCH /todos/:id",
+  "PATCH /todos/:id/priority-axes",
+  "POST /tags",
+  "POST /todo-queue/:id/approve",
+  "POST /todo-queue/:id/reject",
+  "POST /todos",
+  "PUT /tags/:id",
+  "PUT /todos/:id",
+  "PUT /todos/:id/tags",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) userProfileRoutes.ts should have all expected routes registered 1`] = `
+[
+  "GET /users/:userId/profile",
+  "GET /users/:userId/schedules",
+  "GET /users/:userId/status",
+]
+`;
+
+exports[`Route registration contract (snapshot-based) userStatusRoutes.ts should have all expected routes registered 1`] = `
+[
+  "GET /user-status",
+  "POST /user-status/refresh",
+]
+`;

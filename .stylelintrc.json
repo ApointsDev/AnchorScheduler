@@ -1,0 +1,17 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "rules": {
+    "color-no-hex": [true, {
+      "except": ["#ffffff", "#000000", "#fff", "#000"]
+    }],
+    "declaration-property-value-disallowed-list": {
+      "transition": ["/0\\.\\d+s/"],
+      "animation": ["/0\\.\\d+s/"],
+      "border-radius": ["/\\d+px/"],
+      "z-index": ["/^\\d{3,}$/"]
+    },
+    "value-keyword-case": ["lower", {
+      "ignoreKeywords": ["currentColor", "transparent"]
+    }]
+  }
+}

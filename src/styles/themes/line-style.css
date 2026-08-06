@@ -1,0 +1,282 @@
+/* ═══════════════════════════════════════════════════════════
+   THEME: 线条风格 (Line Style)
+   圆润Q版扁平插画风 — 纯色块、均匀描边、大弧度圆角
+   ═══════════════════════════════════════════════════════════ */
+
+html[data-style-theme="line-style"] {
+    /* ═══════════════════════════════════════════════════════
+       COLOR PALETTE
+       奶白基底 #FFFFFF  → 脸部/水手服主体/页面底色
+       浅天蓝主色 #96D0F5 → 皮毛/主视觉色块/按钮底色
+       深海藏青 #1A5899  → 描边/五官/领结/水手条纹/文字主色
+       米奶油浅黄 #FFFBE8 → 页面背景/弹窗底色
+       深蓝黑 #10335C    → 瞳孔/重点强调文字/边框
+       ═══════════════════════════════════════════════════════ */
+
+    /* ── Primary Scale (based on #96D0F5 浅天蓝主色) ─────── */
+    --color-primary-50: #eaf6fd;
+    --color-primary-100: #d5edfb;
+    --color-primary-200: #bde3f8;
+    --color-primary-300: #aadaf6;
+    --color-primary-400: #96d0f5;
+    --color-primary-500: #96d0f5;
+    --color-primary-600: #7abfec;
+    --color-primary-700: #5eafe3;
+    --color-primary-800: #429fda;
+    --color-primary-900: #1a5899;
+
+    /* ── Neutral Scale (based on #FFFBE8 / #1A5899) ──────── */
+    --color-neutral-50: #fffef5;
+    --color-neutral-100: #fffbe8;
+    --color-neutral-200: #f5f0d8;
+    --color-neutral-300: #d4cfb8;
+    --color-neutral-400: #9aaac0;
+    --color-neutral-500: #5c7d99;
+    --color-neutral-600: #3a5f7a;
+    --color-neutral-700: #1a5899;
+    --color-neutral-800: #1a5899;
+    --color-neutral-900: #10335c;
+
+    /* ── Status Colors (保持和谐) ─────────────────────────── */
+    --color-success-50: #eafbf2;
+    --color-success-100: #d1f7e2;
+    --color-success-200: #a3efc4;
+    --color-success-300: #6ae3a2;
+    --color-success-400: #34d785;
+    --color-success-500: #10b981;
+    --color-success-600: #059669;
+    --color-success-700: #047857;
+    --color-success-800: #065f46;
+    --color-success-900: #064e3b;
+
+    --color-danger-50: #fef2f2;
+    --color-danger-100: #fee2e2;
+    --color-danger-200: #fecaca;
+    --color-danger-300: #fca5a5;
+    --color-danger-400: #f87171;
+    --color-danger-500: #ef4444;
+    --color-danger-600: #dc2626;
+    --color-danger-700: #b91c1c;
+    --color-danger-800: #991b1b;
+    --color-danger-900: #7f1d1d;
+
+    --color-warning-50: #fffbeb;
+    --color-warning-100: #fff7ed;
+    --color-warning-200: #ffedd5;
+    --color-warning-300: #fed7aa;
+    --color-warning-400: #fdba74;
+    --color-warning-500: #f97316;
+    --color-warning-600: #ea580c;
+    --color-warning-700: #c2410c;
+    --color-warning-800: #9a3412;
+    --color-warning-900: #7c2d12;
+
+    --color-info-50: #eff6ff;
+    --color-info-100: #dbeafe;
+    --color-info-200: #bfdbfe;
+    --color-info-300: #93c5fd;
+    --color-info-400: #60a5fa;
+    --color-info-500: #3b82f6;
+    --color-info-600: #2563eb;
+    --color-info-700: #1d4ed8;
+    --color-info-800: #1e40af;
+    --color-info-900: #1e3a8a;
+
+    /* ═══════════════════════════════════════════════════════
+       SEMANTIC COLOR ALIASES
+       ═══════════════════════════════════════════════════════ */
+
+    /* Surfaces — 米奶油浅黄底 + 奶白卡片 */
+    --color-surface-primary: #fffbe8;
+    --color-surface-secondary: #f5f0d8;
+    --color-surface-card: #ffffff;
+    --color-surface-overlay: rgba(16, 51, 92, 0.45);
+
+    /* Text — 深海藏青主文字 */
+    --color-text-primary: #1a5899;
+    --color-text-secondary: #3a6fa9;
+    --color-text-tertiary: #7b9ec3;
+    --color-text-inverse: #ffffff;
+
+    /* Borders — 统一描边色 */
+    --color-border-default: #1a5899;
+    --color-border-subtle: #96d0f5;
+    --color-border-strong: #10335c;
+
+    /* Brand — 浅天蓝主色 */
+    --color-brand-primary: #96d0f5;
+    --color-brand-primary-hover: #7abfec;
+    --color-brand-primary-active: #5eafe3;
+
+    /* ── Spacing (unchanged) ──────────────────────────────── */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+
+    /* ═══════════════════════════════════════════════════════
+       BORDER RADIUS — 全线圆角化（Q版团子感）
+       ═══════════════════════════════════════════════════════ */
+    --radius-sm: 10px;
+    --radius-md: 14px;
+    --radius-lg: 18px;
+    --radius-xl: 22px;
+    --radius-2xl: 28px;
+    --radius-full: 9999px;
+
+    /* ── Uniform Stroke Width ─────────────────────────────── */
+    --stroke-width: 2px;
+
+    /* ═══════════════════════════════════════════════════════
+       SHADOWS — 扁平插画风，无复杂光影
+       ═══════════════════════════════════════════════════════ */
+    --shadow-sm: 0 1px 2px rgba(16, 51, 92, 0.06);
+    --shadow-md: 0 2px 4px rgba(16, 51, 92, 0.08);
+    --shadow-lg: 0 4px 8px rgba(16, 51, 92, 0.1);
+    --shadow-xl: 0 6px 12px rgba(16, 51, 92, 0.12);
+
+    /* ── Typography (保持可读性) ──────────────────────────── */
+    --font-size-xs: 0.7rem;
+    --font-size-sm: 0.8rem;
+    --font-size-base: 0.875rem;
+    --font-size-lg: 1rem;
+    --font-size-xl: 1.15rem;
+    --font-size-2xl: 1.25rem;
+    --font-size-3xl: 1.5rem;
+
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    --line-height-tight: 1.25;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.7;
+
+    /* ── Animation (unchanged) ────────────────────────────── */
+    --duration-fast: 0.15s;
+    --duration-normal: 0.2s;
+    --duration-slow: 0.3s;
+
+    /* ── Z-Index (unchanged) ──────────────────────────────── */
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-modal-backdrop: 1000;
+    --z-modal: 1001;
+    --z-tooltip: 1100;
+
+    /* ── Breakpoints (unchanged) ──────────────────────────── */
+    --breakpoint-xs: 480px;
+    --breakpoint-sm: 640px;
+    --breakpoint-md: 768px;
+    --breakpoint-lg: 1024px;
+
+    /* ── Layout (unchanged) ───────────────────────────────── */
+    --container-max-width: 1100px;
+    --settings-max-width: 900px;
+
+    /* ═══════════════════════════════════════════════════════
+       BACKWARD COMPATIBILITY LAYER
+       ═══════════════════════════════════════════════════════ */
+
+    --color-primary: var(--color-brand-primary);
+    --color-primary-light: var(--color-primary-400);
+    --color-primary-active-border: var(--color-primary-600);
+
+    --color-text-dark: var(--color-text-primary);
+    --color-text-medium: var(--color-text-secondary);
+    --color-text-light: var(--color-text-tertiary);
+
+    --color-bg-light: var(--color-surface-primary);
+    --color-bg-hover: var(--color-surface-secondary);
+    --color-bg-card: var(--color-surface-card);
+
+    --color-border: var(--color-border-default);
+
+    --color-white: #ffffff;
+
+    --color-success: var(--color-success-500);
+    --color-danger: var(--color-danger-500);
+    --color-danger-dark: var(--color-danger-600);
+    --color-danger-light: var(--color-danger-100);
+    --color-warning: var(--color-warning-500);
+    --color-info: var(--color-info-500);
+
+    --color-gradient-start: var(--color-primary-400);
+    --color-gradient-end: var(--color-primary-600);
+
+    --color-primary-active: var(--color-primary-600);
+    --color-secondary-active: #d4cfb8;
+    --color-outline-active: #e8e4d0;
+    --color-ghost-active: #e8e4d0;
+    --color-danger-active: var(--color-danger-700);
+
+    /* ── Component: Log Viewer ────────────────────────────── */
+    --color-log-payload-bg: #10335c;
+    --color-log-payload-text: #e8f4fd;
+    --color-log-payload-link: #96d0f5;
+
+    /* ── Component: Timeline ──────────────────────────────── */
+    --color-timeline-line: #96d0f5;
+    --color-timeline-dot: #bde3f8;
+    --color-timeline-dot-active: #1a5899;
+    --color-timeline-dot-active-shadow: #d5edfb;
+    --color-timeline-dot-completed: #10b981;
+    --color-timeline-dot-completed-shadow: #d1f7e2;
+    --color-timeline-dot-overdue: #ef4444;
+    --color-timeline-dot-overdue-shadow: #fee2e2;
+
+    /* ── Component: Task Cards ────────────────────────────── */
+    --color-task-card-active-bg: #eaf6fd;
+    --color-task-card-upcoming-border: #96d0f5;
+
+    /* ── Component: Mini Tasks ────────────────────────────── */
+    --color-mini-task-bg: #d5edfb;
+    --color-mini-task-text: #1a5899;
+    --color-mini-task-time: #3a6fa9;
+
+    /* ── Component: AI Chat ───────────────────────────────── */
+    --color-chat-user-bg: #96d0f5;
+    --color-chat-assistant-bg: #f5f0d8;
+    --color-chat-assistant-text: #1a5899;
+    --color-chat-tool-header: #3a6fa9;
+    --color-chat-tool-output-bg: #10335c;
+    --color-chat-tool-output-text: #e8f4fd;
+    --color-chat-loading-dot: #bde3f8;
+
+    /* ── Component: Quadrant View ─────────────────────────── */
+    --qd-bg-panel: #fffef5;
+    --qd-border-panel: #96d0f5;
+    --qd-border-dashed: #bde3f8;
+    --qd-text-heading: #1a5899;
+    --qd-text-muted: #7b9ec3;
+    --qd-text-content: #10335c;
+    --qd-text-time: #3a6fa9;
+    --qd-bg-note-default: #fffbe8;
+    --qd-bg-note-q1: #fce4e4;
+    --qd-bg-note-q2: #d5edfb;
+    --qd-bg-note-q3: #fff9c4;
+    --qd-bg-note-q4: #e8f5e9;
+    --qd-border-accent-q1: #e57373;
+    --qd-border-accent-q2: #96d0f5;
+    --qd-border-accent-q3: #ffb74d;
+    --qd-border-accent-q4: #81c784;
+    --qd-empty-text: #bde3f8;
+    --qd-pin-light: #d5edfb;
+    --qd-pin-dark: #1a5899;
+
+    /* ── Previously Missing Variables ─────────────────────── */
+    --color-text-primary: #1a5899;
+    --color-text-secondary: #3a6fa9;
+    --color-bg-white: #ffffff;
+    --color-text: #1a5899;
+    --color-bg-subtle: #f5f0d8;
+    --color-success-bg: #d1f7e2;
+    --color-bg-secondary: #f5f0d8;
+    --color-border-light: #bde3f8;
+}

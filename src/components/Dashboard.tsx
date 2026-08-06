@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { getBreakpoint, isBelow } from "../utils/breakpoints";
 import {
     startMicrosoftAuth,
     startExchangeAuth,
@@ -25,9 +27,13 @@ import {
     type CalDavStatus,
     type CalDavSyncResult,
     type CalDavServerStatus,
+    setAutoSchedulePromotions as setAutoSchedulePromotionsApi,
+    setStripReplyPrefix as setStripReplyPrefixApi,
+    getUserSettings,
 } from "../services/api";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/Card";
 import { Button } from "./ui/Button";
+import Switch from "./ui/Switch";
 import { Input } from "./ui/Input";
 import CalDavConnectionCard from "./ui/CalDavConnectionCard";
 import { Modal } from "./ui/Modal";
@@ -37,7 +43,12 @@ import SearchTasks from "./Schedule/SearchTasks";
 import ScheduleQueue from "./Schedule/ScheduleQueue";
 import LogViewer from "./Logs/LogViewer";
 import AIChat from "./AIChat/AIChat";
+import MyMail from "./MyMail/MyMail";
+import ShareModal from "./Share/ShareModal";
+import LoadingSpinner from "./ui/LoadingSpinner";
+import { MobileActionBarProvider } from "./ui/MobileActionBar";
 import { useWeek } from "../context/WeekContext";
+import { useTheme } from "../utils/useTheme";
 import {
     LayoutDashboard,
     Calendar,
@@ -55,10 +66,12 @@ import {
     Check,
     Trash2,
     Download,
+    Mail,
+    Share2,
 } from "lucide-react";
-import { ToggleButton } from "./ui/ToggleButton";
+import ThemeSwitcher from "./ThemeSwitcher";
 import "../styles/Dashboard.css";
-import logo from "../assets/logo.svg";
+import logo from "../assets/anchorcat.svg";
 
 interface DashboardProps {
     onLogout: () => void;
@@ -67,24 +80,15 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
     const navigate = useNavigate();
-
-    // Get breakpoint from CSS variables
-    const getMobileBreakpoint = () => {
-        const root = document.documentElement;
-        const breakpoint = getComputedStyle(root)
-            .getPropertyValue("--breakpoint-mobile")
-            .trim();
-        return parseInt(breakpoint) || 768;
-    };
+    const { t, i18n } = useTranslation();
 
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-        const mobileBreakpoint = getMobileBreakpoint();
-        const isMobileView = window.innerWidth < mobileBreakpoint;
-        return !isMobileView && window.innerWidth < 1024;
+        const md = getBreakpoint("md");
+        const lg = getBreakpoint("lg");
+        const isMobileView = window.innerWidth < md;
+        return !isMobileView && window.innerWidth < lg;
     });
-    const [isMobile, setIsMobile] = useState(
-        () => window.innerWidth < getMobileBreakpoint(),
-    );
+    const [isMobile, setIsMobile] = useState(() => isBelow("md"));
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [email] = useState(localStorage.getItem("user_email") || "");
     const [XJTLUaccount, setXJTLUaccount] = useState(
@@ -138,6 +142,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
     // CalDAV Server state
     const [calDavServerStatus, setCalDavServerStatus] =
         useState<CalDavServerStatus | null>(null);
+    const [autoSchedulePromotions, setAutoSchedulePromotions] =
+        useState<boolean>(false);
+    const [stripReplyPrefix, setStripReplyPrefix] = useState<boolean>(true);
+    const { isDark, toggleTheme } = useTheme();
+    const [showShareModal, setShowShareModal] = useState(false);
     const [calDavServerLoading, setCalDavServerLoading] = useState(false);
     const [calDavServerCopiedField, setCalDavServerCopiedField] = useState<
         string | null
@@ -160,7 +169,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             "width=1024,height=768",
         );
         if (!popup) {
-            setEbridgePopupError("弹窗被浏览器拦截，请允许本站弹窗后重试");
+            setEbridgePopupError(t("settings.popupBlocked"));
             return;
         }
         setEbridgePopup(popup);
@@ -175,12 +184,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             ) {
                 saveEbridgeTimetableUrl(event.data.url)
                     .then(() => {
-                        setMessage("课表链接已成功获取！");
+                        setMessage(t("settings.timetableUrlSuccess"));
                         setTimeout(() => setMessage(""), 2000);
                         handleRefreshStatus();
                     })
                     .catch((err) => {
-                        setEbridgePopupError(err.message || "保存失败");
+                        setEbridgePopupError(
+                            err.message || t("settings.saveFailed"),
+                        );
                     })
                     .finally(() => {
                         if (ebridgePopup && !ebridgePopup.closed) {
@@ -204,12 +215,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
 
     useEffect(() => {
         const handleResize = () => {
-            const mobileBreakpoint = getMobileBreakpoint();
-            const mobile = window.innerWidth < mobileBreakpoint;
+            const mobile = isBelow("md");
             setIsMobile(mobile);
             if (!mobile) {
                 setIsMobileMenuOpen(false);
-                setIsSidebarCollapsed(window.innerWidth < 1024);
+                setIsSidebarCollapsed(window.innerWidth < getBreakpoint("lg"));
             }
         };
 
@@ -224,17 +234,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             setStatusError("");
 
             try {
-                // 并行获取API的状态
+                // 并行获取API状态和用户设置
                 const [
                     msTodoResult,
                     ebridgeResult,
                     calDavResult,
                     calDavServerResult,
+                    userSettings,
                 ] = await Promise.all([
                     getMicrosoftTodoStatus(),
                     getEbridgeStatus(),
                     getCalDavStatus().catch(() => null),
                     getCalDavServerStatus().catch(() => null),
+                    getUserSettings().catch(() => null),
                 ]);
 
                 setMsTodoStatus(msTodoResult);
@@ -242,12 +254,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                 setCalDavStatus(calDavResult);
                 setCalDavServerStatus(calDavServerResult);
 
+                if (userSettings) {
+                    setAutoSchedulePromotions(
+                        userSettings.autoSchedulePromotions,
+                    );
+                    setStripReplyPrefix(userSettings.stripReplyPrefix);
+                    localStorage.setItem(
+                        "stripReplyPrefix",
+                        String(userSettings.stripReplyPrefix),
+                    );
+                }
+
                 // 如果有未绑定的账号，显示弹窗
                 if (!msTodoResult.connected || !ebridgeResult.connected) {
                     setShowUnboundModal(true);
                 }
             } catch (err: any) {
-                setStatusError(err.message || "获取接口状态失败");
+                setStatusError(err.message || t("settings.statusFetchFailed"));
                 // console.error('Status fetch error:', err);
             } finally {
                 setStatusLoading(false);
@@ -297,25 +320,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             // 为了确保状态最新，延迟一点再刷新
             setTimeout(() => handleRefreshStatus(), 1000);
         } catch (err: any) {
-            setStatusError("Exchange 绑定失败或被取消");
+            setStatusError(t("settings.exchangeBindFailed"));
         } finally {
             setLoading(false);
         }
     };
 
     const handleUnbindExchange = async () => {
-        if (
-            !window.confirm(
-                "确定要解除 Exchange 邮箱绑定吗？这将停止邮件智能分析和日历同步功能。",
-            )
-        )
-            return;
+        if (!window.confirm(t("settings.confirmUnbindExchange"))) return;
         setLoading(true);
         try {
             await unbindExchange();
             await handleRefreshStatus();
         } catch (err: any) {
-            setStatusError(err.message || "解绑失败");
+            setStatusError(err.message || t("settings.unbindFailed"));
         } finally {
             setLoading(false);
         }
@@ -348,25 +366,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             });
             setTimeout(() => handleRefreshStatus(), 1000);
         } catch (err: any) {
-            setStatusError("SMTP 绑定失败: " + (err.message || "未知错误"));
+            setStatusError(
+                `${t("settings.smtpBindFailed")}: ${err.message || t("common.unknownError")}`,
+            );
         } finally {
             setLoading(false);
         }
     };
 
     const handleUnbindSmtp = async () => {
-        if (
-            !window.confirm(
-                "确定要解除 IMAP 邮箱绑定吗？这将停止 IMAP 邮件分析功能。",
-            )
-        )
-            return;
+        if (!window.confirm(t("settings.confirmUnbindImap"))) return;
         setLoading(true);
         try {
             await unbindSmtp();
             await handleRefreshStatus();
         } catch (err: any) {
-            setStatusError(err.message || "解绑失败");
+            setStatusError(err.message || t("settings.unbindFailed"));
         } finally {
             setLoading(false);
         }
@@ -401,7 +416,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             setCalDavStatus(calDavResult);
             setCalDavServerStatus(calDavServerResult);
         } catch (err: any) {
-            setStatusError(err.message || "刷新状态失败");
+            setStatusError(err.message || t("settings.refreshFailed"));
         } finally {
             setStatusLoading(false);
         }
@@ -422,15 +437,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
         try {
             const result = await syncTimetable();
             setResultModalData({
-                title: "同步成功",
-                message: `课表同步成功！新增: ${result.added}, 错误: ${result.errors}`,
+                title: t("settings.syncSuccess"),
+                message: t("settings.timetableSyncSuccess", {
+                    added: result.added,
+                    errors: result.errors,
+                }),
                 isError: false,
             });
             setShowResultModal(true);
         } catch (err: any) {
             setResultModalData({
-                title: "同步失败",
-                message: err.message || "课表同步失败",
+                title: t("settings.syncFailed"),
+                message: err.message || t("settings.timetableSyncFailed"),
                 isError: true,
             });
             setShowResultModal(true);
@@ -450,15 +468,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
         try {
             const result = await deleteTimetableTasks();
             setResultModalData({
-                title: "操作成功",
+                title: t("settings.operationSuccess"),
                 message: result.message,
                 isError: false,
             });
             setShowResultModal(true);
         } catch (err: any) {
             setResultModalData({
-                title: "操作失败",
-                message: err.message || "删除课程表日程失败",
+                title: t("settings.operationFailed"),
+                message: err.message || t("settings.deleteTimetableFailed"),
                 isError: true,
             });
             setShowResultModal(true);
@@ -488,25 +506,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             });
             setTimeout(() => handleRefreshStatus(), 500);
         } catch (err: any) {
-            setStatusError("CalDAV 绑定失败: " + (err.message || "未知错误"));
+            setStatusError(
+                `${t("settings.caldavBindFailed")}: ${err.message || t("common.unknownError")}`,
+            );
         } finally {
             setCalDavLoading(false);
         }
     };
 
     const handleUnbindCalDav = async () => {
-        if (
-            !window.confirm(
-                "确定要解除 CalDAV 日历绑定吗？这将停止日历同步功能。",
-            )
-        )
-            return;
+        if (!window.confirm(t("settings.confirmUnbindCaldav"))) return;
         setCalDavLoading(true);
         try {
             await unbindCalDav();
             await handleRefreshStatus();
         } catch (err: any) {
-            setStatusError(err.message || "解绑失败");
+            setStatusError(err.message || t("settings.unbindFailed"));
         } finally {
             setCalDavLoading(false);
         }
@@ -521,7 +536,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             setTimeout(() => handleRefreshStatus(), 500);
         } catch (err: any) {
             setStatusError(
-                "CalDAV 服务器启用失败: " + (err.message || "未知错误"),
+                `${t("settings.caldavServerEnableFailed")}: ${err.message || t("common.unknownError")}`,
             );
         } finally {
             setCalDavServerLoading(false);
@@ -529,13 +544,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
     };
 
     const handleDisableCalDavServer = async () => {
-        if (!window.confirm("确定要停用平台 CalDAV 服务器吗？")) return;
+        if (!window.confirm(t("settings.confirmDisableCaldavServer"))) return;
         setCalDavServerLoading(true);
         try {
             await disableCalDavServer();
             await handleRefreshStatus();
         } catch (err: any) {
-            setStatusError(err.message || "停用失败");
+            setStatusError(err.message || t("settings.disableFailed"));
         } finally {
             setCalDavServerLoading(false);
         }
@@ -549,7 +564,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             setCalDavSyncResult(result.result);
             setShowCalDavSyncModal(true);
         } catch (err: any) {
-            setCalDavSyncError(err.message || "同步失败");
+            setCalDavSyncError(err.message || t("settings.syncFailed"));
             setCalDavSyncResult(null);
             setShowCalDavSyncModal(true);
         } finally {
@@ -559,7 +574,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
 
     const renderConnectionStatus = () => {
         if (statusLoading) {
-            return <div className="status-loading">正在检查连接状态...</div>;
+            return <LoadingSpinner text={t("common.checkingStatus")} />;
         }
 
         if (statusError) {
@@ -569,7 +584,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
         return (
             <Card className="connection-panel">
                 <CardHeader>
-                    <CardTitle>服务连接状态</CardTitle>
+                    <CardTitle>{t("settings.connectionStatus")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="conn-table">
@@ -584,7 +599,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     Microsoft To Do
                                 </span>
                                 <span className="conn-meta">
-                                    任务同步与管理
+                                    {t("settings.taskSync")}
                                 </span>
                             </div>
                             <div className="conn-state">
@@ -592,8 +607,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     className={`conn-tag ${msTodoStatus?.connected ? "online" : ""}`}
                                 >
                                     {msTodoStatus?.connected
-                                        ? "已连接"
-                                        : "未连接"}
+                                        ? t("common.connected")
+                                        : t("common.notConnected")}
                                 </span>
                             </div>
                             <div className="conn-actions">
@@ -603,7 +618,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         variant="primary"
                                         size="sm"
                                     >
-                                        连接
+                                        {t("common.connect")}
                                     </Button>
                                 )}
                             </div>
@@ -617,12 +632,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                             </div>
                             <div className="conn-body">
                                 <span className="conn-label">
-                                    Exchange 邮箱
+                                    {t("settings.exchangeMail")}
                                 </span>
                                 <span className="conn-meta">
                                     {ebridgeStatus?.exchangeBinded
-                                        ? "已绑定"
-                                        : "XJTLU 学校邮箱"}
+                                        ? t("common.bound")
+                                        : t("settings.xjtluSchoolEmail")}
                                 </span>
                             </div>
                             <div className="conn-state">
@@ -630,8 +645,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     className={`conn-tag ${ebridgeStatus?.exchangeBinded ? "online" : ""}`}
                                 >
                                     {ebridgeStatus?.exchangeBinded
-                                        ? "已绑定"
-                                        : "未绑定"}
+                                        ? t("common.bound")
+                                        : t("settings.notBound")}
                                 </span>
                             </div>
                             <div className="conn-actions">
@@ -642,7 +657,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         size="sm"
                                         className="conn-unbind"
                                     >
-                                        解绑
+                                        {t("settings.unbind")}
                                     </Button>
                                 ) : (
                                     <Button
@@ -650,7 +665,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         variant="primary"
                                         size="sm"
                                     >
-                                        绑定
+                                        {t("settings.bind")}
                                     </Button>
                                 )}
                             </div>
@@ -663,11 +678,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                 />
                             </div>
                             <div className="conn-body">
-                                <span className="conn-label">IMAP 邮箱</span>
+                                <span className="conn-label">
+                                    {t("settings.imapMail")}
+                                </span>
                                 <span className="conn-meta">
                                     {ebridgeStatus?.smtpBinded
-                                        ? ebridgeStatus.smtpEmail || "已绑定"
-                                        : "IMAP/SMTP 协议"}
+                                        ? ebridgeStatus.smtpEmail ||
+                                          t("common.bound")
+                                        : t("settings.imapSmtpProtocol")}
                                 </span>
                             </div>
                             <div className="conn-state">
@@ -675,8 +693,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     className={`conn-tag ${ebridgeStatus?.smtpBinded ? "online" : ""}`}
                                 >
                                     {ebridgeStatus?.smtpBinded
-                                        ? "已绑定"
-                                        : "未绑定"}
+                                        ? t("common.bound")
+                                        : t("settings.notBound")}
                                 </span>
                             </div>
                             <div className="conn-actions">
@@ -687,7 +705,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         size="sm"
                                         className="conn-unbind"
                                     >
-                                        解绑
+                                        {t("settings.unbind")}
                                     </Button>
                                 ) : (
                                     <Button
@@ -695,7 +713,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         variant="primary"
                                         size="sm"
                                     >
-                                        绑定
+                                        {t("settings.bind")}
                                     </Button>
                                 )}
                             </div>
@@ -709,12 +727,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                             </div>
                             <div className="conn-body">
                                 <span className="conn-label">
-                                    CalDAV 日历（外部）
+                                    {t("settings.caldavExternal")}
                                 </span>
                                 <span className="conn-meta">
                                     {calDavStatus?.enabled
-                                        ? calDavStatus.calendarUrl || "已连接"
-                                        : "绑定外部 CalDAV 日历"}
+                                        ? calDavStatus.calendarUrl ||
+                                          t("common.connected")
+                                        : t("settings.bindExternalCaldav")}
                                 </span>
                             </div>
                             <div className="conn-state">
@@ -722,8 +741,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     className={`conn-tag ${calDavStatus?.enabled ? "online" : ""}`}
                                 >
                                     {calDavStatus?.enabled
-                                        ? "已连接"
-                                        : "未连接"}
+                                        ? t("common.connected")
+                                        : t("common.notConnected")}
                                 </span>
                             </div>
                             <div className="conn-actions">
@@ -734,7 +753,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         size="sm"
                                         className="conn-unbind"
                                     >
-                                        解绑
+                                        {t("settings.unbind")}
                                     </Button>
                                 ) : (
                                     <Button
@@ -742,7 +761,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         variant="primary"
                                         size="sm"
                                     >
-                                        绑定
+                                        {t("settings.bind")}
                                     </Button>
                                 )}
                             </div>
@@ -756,13 +775,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                             </div>
                             <div className="conn-body">
                                 <span className="conn-label">
-                                    平台 CalDAV 服务器
+                                    {t("settings.caldavServer")}
                                 </span>
                                 <span className="conn-meta">
                                     {calDavServerStatus?.enabled
                                         ? calDavServerStatus.serverUrl ||
-                                          "已启用"
-                                        : "平台内置日历同步服务"}
+                                          t("common.enabled")
+                                        : t("settings.builtInCalendarSync")}
                                 </span>
                             </div>
                             <div className="conn-state">
@@ -770,8 +789,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     className={`conn-tag ${calDavServerStatus?.enabled ? "online" : ""}`}
                                 >
                                     {calDavServerStatus?.enabled
-                                        ? "已启用"
-                                        : "未启用"}
+                                        ? t("common.enabled")
+                                        : t("common.notEnabled")}
                                 </span>
                             </div>
                             <div className="conn-actions">
@@ -786,7 +805,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                             variant="outline"
                                             size="sm"
                                         >
-                                            详情
+                                            {t("common.details")}
                                         </Button>
                                         <Button
                                             onClick={handleDisableCalDavServer}
@@ -795,7 +814,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                             className="conn-unbind"
                                             disabled={calDavServerLoading}
                                         >
-                                            停用
+                                            {t("settings.disable")}
                                         </Button>
                                     </>
                                 ) : (
@@ -806,8 +825,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         disabled={calDavServerLoading}
                                     >
                                         {calDavServerLoading
-                                            ? "启用中..."
-                                            : "启用"}
+                                            ? t("common.enabling")
+                                            : t("settings.enable")}
                                     </Button>
                                 )}
                             </div>
@@ -821,10 +840,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                             </div>
                             <div className="conn-body">
                                 <span className="conn-label">
-                                    Ebridge 教务系统
+                                    {t("settings.ebridgeSystem")}
                                 </span>
                                 <span className="conn-meta">
-                                    课程与考试信息
+                                    {t("settings.courseExamInfo")}
                                 </span>
                             </div>
                             <div className="conn-state">
@@ -832,8 +851,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     className={`conn-tag ${ebridgeStatus?.connected ? "online" : ""}`}
                                 >
                                     {ebridgeStatus?.connected
-                                        ? "已连接"
-                                        : "未连接"}
+                                        ? t("common.connected")
+                                        : t("common.notConnected")}
                                 </span>
                             </div>
                             <div className="conn-actions">
@@ -843,7 +862,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         variant="primary"
                                         size="sm"
                                     >
-                                        连接
+                                        {t("common.connect")}
                                     </Button>
                                 )}
                             </div>
@@ -863,10 +882,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     </div>
                                     <div className="conn-body">
                                         <span className="conn-label">
-                                            同步课表
+                                            {t("settings.syncTimetable")}
                                         </span>
                                         <span className="conn-meta">
-                                            从教务系统获取最新课程
+                                            {t("settings.fetchLatestCourses")}
                                         </span>
                                     </div>
                                     <div className="conn-actions">
@@ -877,8 +896,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                             size="sm"
                                         >
                                             {syncLoading
-                                                ? "同步中..."
-                                                : "立即同步"}
+                                                ? t("settings.syncing")
+                                                : t("settings.syncNow")}
                                         </Button>
                                     </div>
                                 </div>
@@ -891,10 +910,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     </div>
                                     <div className="conn-body">
                                         <span className="conn-label">
-                                            清空课表
+                                            {t("settings.clearTimetable")}
                                         </span>
                                         <span className="conn-meta">
-                                            删除所有导入的课程日程
+                                            {t(
+                                                "settings.deleteAllImportedTasks",
+                                            )}
                                         </span>
                                     </div>
                                     <div className="conn-actions">
@@ -904,7 +925,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                             variant="danger"
                                             size="sm"
                                         >
-                                            删除全部
+                                            {t("settings.deleteAll")}
                                         </Button>
                                     </div>
                                 </div>
@@ -925,12 +946,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     </div>
                                     <div className="conn-body">
                                         <span className="conn-label">
-                                            同步 CalDAV 日历
+                                            {t("settings.syncCaldavCalendar")}
                                         </span>
                                         <span className="conn-meta">
-                                            双向同步日程数据
+                                            {t("settings.bidirectionalSync")}
                                             {calDavStatus?.lastSyncAt
-                                                ? `（上次同步: ${new Date(calDavStatus.lastSyncAt).toLocaleString()}）`
+                                                ? ` (${t("settings.lastSync")}: ${new Date(calDavStatus.lastSyncAt).toLocaleString()})`
                                                 : ""}
                                         </span>
                                     </div>
@@ -942,8 +963,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                             size="sm"
                                         >
                                             {calDavSyncLoading
-                                                ? "同步中..."
-                                                : "立即同步"}
+                                                ? t("settings.syncing")
+                                                : t("settings.syncNow")}
                                         </Button>
                                     </div>
                                 </div>
@@ -958,7 +979,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                             onClick={handleRefreshStatus}
                             size="sm"
                         >
-                            <RefreshCw size={14} /> <span>刷新</span>
+                            <RefreshCw size={14} />{" "}
+                            <span>{t("common.refresh")}</span>
                         </Button>
                         <Button
                             variant="outline"
@@ -971,7 +993,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                 <Copy size={14} />
                             )}
                             <span>
-                                {tokenCopied ? "已复制" : "复制 MCP Token"}
+                                {tokenCopied
+                                    ? t("common.copied")
+                                    : t("common.copyMcpToken")}
                             </span>
                         </Button>
                     </div>
@@ -987,29 +1011,36 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
         if (view === "queue") return <ScheduleQueue />;
         if (view === "logs") return <LogViewer />;
         if (view === "chat") return <AIChat />;
+        if (view === "mail") return <MyMail />;
 
         // Default Dashboard View
         return (
             <div className="settings-page">
                 <Card>
                     <CardHeader>
-                        <CardTitle>账号信息</CardTitle>
+                        <CardTitle>{t("settings.accountInfo")}</CardTitle>
                     </CardHeader>
                     <CardContent className="account-info">
                         <div className="info-item">
-                            <span className="info-label">登录邮箱:</span>
+                            <span className="info-label">
+                                {t("settings.loginEmail")}:
+                            </span>
                             <span className="info-value">{email}</span>
                         </div>
                         <div className="info-item">
-                            <span className="info-label">XJTLU 账号:</span>
+                            <span className="info-label">
+                                {t("settings.xjtluAccount")}:
+                            </span>
                             <span className="info-value">
-                                {XJTLUaccount || "未设置"}
+                                {XJTLUaccount || t("settings.notSet")}
                             </span>
                         </div>
                         <div className="info-item">
-                            <span className="info-label">退出登录:</span>
+                            <span className="info-label">
+                                {t("settings.logout")}:
+                            </span>
                             <Button variant="danger" onClick={handleLogout}>
-                                <LogOut size={18} /> 退出登录
+                                <LogOut size={18} /> {t("nav.logout")}
                             </Button>
                         </div>
                     </CardContent>
@@ -1017,7 +1048,168 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>周次设置</CardTitle>
+                        <CardTitle>{t("settings.language")}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: 8,
+                            }}
+                        >
+                            {[
+                                { code: "zh-CN", label: t("common.chinese") },
+                                { code: "en", label: t("common.english") },
+                            ].map((lang) => (
+                                <Button
+                                    key={lang.code}
+                                    variant={
+                                        i18n.language === lang.code
+                                            ? "primary"
+                                            : "outline"
+                                    }
+                                    onClick={() =>
+                                        i18n.changeLanguage(lang.code)
+                                    }
+                                >
+                                    {lang.label}
+                                </Button>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{t("settings.appearance")}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <label
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                cursor: "pointer",
+                            }}
+                        >
+                            <div style={{ flex: 1 }}>
+                                <strong>{t("settings.darkMode")}</strong>
+                            </div>
+                            <Switch checked={isDark} onChange={toggleTheme} />
+                        </label>
+                        <div
+                            style={{
+                                marginTop: "16px",
+                                paddingTop: "16px",
+                                borderTop:
+                                    "1px solid var(--color-border-subtle)",
+                            }}
+                        >
+                            <ThemeSwitcher />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{t("settings.aiMailSettings")}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <label
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                cursor: "pointer",
+                            }}
+                        >
+                            <div style={{ flex: 1 }}>
+                                <strong>
+                                    {t("settings.autoSchedulePromotions")}
+                                </strong>
+                                <div
+                                    style={{
+                                        fontSize: "0.85rem",
+                                        color: "var(--color-text-medium)",
+                                        marginTop: 4,
+                                    }}
+                                >
+                                    {t("settings.autoSchedulePromotionsDesc")}
+                                </div>
+                            </div>
+                            <Switch
+                                checked={autoSchedulePromotions}
+                                onChange={async (next) => {
+                                    setAutoSchedulePromotions(next);
+                                    try {
+                                        await setAutoSchedulePromotionsApi(
+                                            next,
+                                        );
+                                    } catch (err) {
+                                        console.error(
+                                            "Failed to update setting:",
+                                            err,
+                                        );
+                                        setAutoSchedulePromotions(!next);
+                                    }
+                                }}
+                            />
+                        </label>
+
+                        <label
+                            style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "12px 0",
+                                borderTop: "1px solid var(--color-border)",
+                                cursor: "pointer",
+                            }}
+                        >
+                            <div style={{ flex: 1 }}>
+                                <strong>
+                                    {t("settings.stripReplyPrefix")}
+                                </strong>
+                                <div
+                                    style={{
+                                        fontSize: "0.85rem",
+                                        color: "var(--color-text-medium)",
+                                        marginTop: 4,
+                                    }}
+                                >
+                                    {t("settings.stripReplyPrefixDesc")}
+                                </div>
+                            </div>
+                            <Switch
+                                checked={stripReplyPrefix}
+                                onChange={async (next) => {
+                                    setStripReplyPrefix(next);
+                                    localStorage.setItem(
+                                        "stripReplyPrefix",
+                                        String(next),
+                                    );
+                                    try {
+                                        await setStripReplyPrefixApi(next);
+                                    } catch (err) {
+                                        console.error(
+                                            "Failed to update setting:",
+                                            err,
+                                        );
+                                        setStripReplyPrefix(!next);
+                                        localStorage.setItem(
+                                            "stripReplyPrefix",
+                                            String(!next),
+                                        );
+                                    }
+                                }}
+                            />
+                        </label>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{t("settings.weekSettings")}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div
@@ -1028,18 +1220,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                             }}
                         >
                             <div>
-                                <strong>当前周（含偏移）: </strong>
+                                <strong>{t("settings.currentWeek")}: </strong>
                                 {weekInfo
                                     ? weekInfo.effectiveWeek
-                                    : "加载中..."}
+                                    : t("common.loading")}
                             </div>
                             <div>
                                 <small>
-                                    学年基准周:{" "}
+                                    {t("settings.academicBaseWeek")}:{" "}
                                     {weekInfo ? weekInfo.rawWeekNumber : "-"},
-                                    全局偏移:{" "}
+                                    {t("settings.globalOffset")}:{" "}
                                     {weekInfo ? weekInfo.globalWeekOffset : "-"}
-                                    , 您的偏移:{" "}
+                                    , {t("settings.yourOffset")}:{" "}
                                     {weekInfo ? weekInfo.userWeekOffset : "-"}
                                 </small>
                             </div>
@@ -1057,12 +1249,46 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         setShowWeekModal(true);
                                     }}
                                 >
-                                    设置当前周数
+                                    {t("settings.setCurrentWeek")}
                                 </Button>
                             </div>
                             {weekError && (
                                 <div className="error-message">{weekError}</div>
                             )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{t("settings.scheduleShare")}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div
+                            style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                flexWrap: "wrap",
+                                gap: 12,
+                            }}
+                        >
+                            <div style={{ flex: 1 }}>
+                                <p
+                                    style={{
+                                        margin: 0,
+                                        color: "var(--color-text-medium)",
+                                        fontSize: "0.9rem",
+                                        lineHeight: 1.6,
+                                    }}
+                                >
+                                    {t("settings.shareScheduleDesc")}
+                                </p>
+                            </div>
+                            <Button onClick={() => setShowShareModal(true)}>
+                                <Share2 size={18} />{" "}
+                                {t("settings.generateShareLink")}
+                            </Button>
                         </div>
                     </CardContent>
                 </Card>
@@ -1091,45 +1317,63 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
 
     const renderNavItems = () => (
         <>
+            {/* Schedule Section */}
+            <div className="sidebar-section-header">
+                {t("nav.sectionSchedule")}
+            </div>
             <button
                 className={`nav-item ${view === "today-schedule" ? "active" : ""}`}
                 onClick={() => handleNavClick("/schedule/today")}
             >
-                <ListTodo size={20} />{" "}
-                <span className="nav-text">今日日程</span>
+                <ListTodo size={20} />
+                <span className="nav-text">{t("nav.todaySchedule")}</span>
             </button>
             <button
                 className={`nav-item ${view === "all-schedule" ? "active" : ""}`}
                 onClick={() => handleNavClick("/schedule/all")}
             >
-                <Calendar size={20} />{" "}
-                <span className="nav-text">全部日程</span>
+                <Calendar size={20} />
+                <span className="nav-text">{t("nav.allSchedule")}</span>
             </button>
             <button
                 className={`nav-item ${view === "search-schedule" ? "active" : ""}`}
                 onClick={() => handleNavClick("/schedule/search")}
             >
-                <Search size={20} /> <span className="nav-text">搜索任务</span>
+                <Search size={20} />
+                <span className="nav-text">{t("nav.searchTasks")}</span>
             </button>
             <button
                 className={`nav-item ${view === "queue" ? "active" : ""}`}
                 onClick={() => handleNavClick("/schedule/queue")}
             >
-                <Check size={20} /> <span className="nav-text">待审批日程</span>
+                <Check size={20} />
+                <span className="nav-text">{t("nav.pendingSchedule")}</span>
+            </button>
+
+            {/* Tools Section */}
+            <div className="sidebar-section-header">
+                {t("nav.sectionTools")}
+            </div>
+            <button
+                className={`nav-item ${view === "mail" ? "active" : ""}`}
+                onClick={() => handleNavClick("/mail")}
+            >
+                <Mail size={20} />
+                <span className="nav-text">{t("nav.myMail")}</span>
             </button>
             <button
                 className={`nav-item ${view === "chat" ? "active" : ""}`}
                 onClick={() => handleNavClick("/chat")}
             >
-                <MessageSquare size={20} />{" "}
-                <span className="nav-text">AI 助手</span>
+                <MessageSquare size={20} />
+                <span className="nav-text">{t("nav.aiAssistant")}</span>
             </button>
             <button
                 className={`nav-item ${view === "logs" ? "active" : ""}`}
                 onClick={() => handleNavClick("/logs")}
             >
-                <FileText size={20} />{" "}
-                <span className="nav-text">系统日志</span>
+                <FileText size={20} />
+                <span className="nav-text">{t("nav.systemLogs")}</span>
             </button>
         </>
     );
@@ -1139,98 +1383,125 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             className={`dashboard-layout ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobile ? "mobile-layout" : ""}`}
         >
             {isMobile ? (
-                <header
-                    className={`mobile-header ${isMobileMenuOpen ? "open" : ""}`}
-                >
-                    <div className="mobile-header-top">
-                        <h1 className="logo-text">
-                            <img src={logo} alt="时锚" className="app-logo" />{" "}
-                            <span>时锚</span>
-                        </h1>
-                        <button
-                            className="mobile-menu-toggle"
-                            onClick={toggleMobileMenu}
-                        >
-                            {isMobileMenuOpen ? (
-                                <X size={24} />
-                            ) : (
-                                <Menu size={24} />
-                            )}
-                        </button>
-                    </div>
+                <>
+                    <header className="mobile-header">
+                        <div className="mobile-header-top">
+                            <h1 className="logo-text">
+                                <img
+                                    src={logo}
+                                    alt={t("app.title")}
+                                    className="app-logo"
+                                />{" "}
+                                <span>{t("app.title")}</span>
+                            </h1>
+                            <button
+                                className="mobile-menu-toggle"
+                                onClick={toggleMobileMenu}
+                            >
+                                {isMobileMenuOpen ? (
+                                    <X size={24} />
+                                ) : (
+                                    <Menu size={24} />
+                                )}
+                            </button>
+                        </div>
+                    </header>
+                    <div
+                        className={`mobile-nav-overlay ${isMobileMenuOpen ? "open" : ""}`}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                    />
                     <nav
                         className={`mobile-nav ${isMobileMenuOpen ? "open" : ""}`}
                     >
+                        <div className="mobile-nav-header">
+                            <h2 className="mobile-nav-title">
+                                {t("nav.menu")}
+                            </h2>
+                            <button
+                                className="mobile-menu-close"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
                         {renderNavItems()}
                         <div className="mobile-nav-footer">
                             <button
                                 className={`nav-item ${!view || view === "dashboard" ? "active" : ""}`}
                                 onClick={() => handleNavClick("/dashboard")}
                             >
-                                <LayoutDashboard size={20} />{" "}
-                                <span className="nav-text">设置</span>
+                                <LayoutDashboard size={20} />
+                                <span className="nav-text">
+                                    {t("nav.settings")}
+                                </span>
                             </button>
                         </div>
                     </nav>
-                </header>
+                </>
             ) : (
                 <aside className="sidebar">
                     <div className="sidebar-header">
                         <h1 className="logo-text">
-                            <img src={logo} alt="时间锚" className="app-logo" />{" "}
-                            <span>时间锚</span>
+                            <img
+                                src={logo}
+                                alt={t("app.title")}
+                                className="app-logo"
+                            />
+                            <span>{t("app.title")}</span>
                         </h1>
-                        <ToggleButton
-                            isToggled={isSidebarCollapsed}
-                            onToggle={toggleSidebar}
-                            toggledIcon={<PanelLeftOpen size={20} />}
-                            untoggledIcon={<PanelLeftClose size={20} />}
-                            toggledClassName=""
-                        />
                     </div>
                     <nav className="sidebar-nav">{renderNavItems()}</nav>
+                    <div className="sidebar-divider" />
                     <div className="sidebar-footer">
+                        <ThemeSwitcher />
                         <button
-                            className={`nav-item ${!view || view === "dashboard" ? "active" : ""}`}
+                            className="nav-item"
                             onClick={() => handleNavClick("/dashboard")}
                         >
-                            <LayoutDashboard size={20} />{" "}
-                            <span className="nav-text">设置</span>
+                            <LayoutDashboard size={20} />
+                            <span className="nav-text">
+                                {t("nav.settings")}
+                            </span>
+                        </button>
+                        <button
+                            className="sidebar-collapse-btn"
+                            onClick={toggleSidebar}
+                        >
+                            {isSidebarCollapsed ? (
+                                <PanelLeftOpen size={20} />
+                            ) : (
+                                <PanelLeftClose size={20} />
+                            )}
+                            <span>{t("nav.collapse")}</span>
                         </button>
                     </div>
                 </aside>
             )}
 
             <main className="main-content">
-                {renderMainContent()}
+                <MobileActionBarProvider>
+                    {renderMainContent()}
+                </MobileActionBarProvider>
 
                 <Modal
                     isOpen={showExchangeConnectModal}
                     onClose={() => setShowExchangeConnectModal(false)}
-                    title="连接 Exchange 邮箱"
+                    title={t("settings.connectExchangeMail")}
                 >
                     <div className="exchange-connect-modal">
                         <p
                             className="modal-description"
                             style={{
                                 marginBottom: "15px",
-                                color: "#666",
+                                color: "var(--color-text-secondary)",
                                 fontSize: "14px",
                             }}
                         >
-                            请输入您的学校邮箱（例如:
-                            san.zhang23@student.xjtlu.edu.cn）。
-                            <br />
-                            系统将引导您通过 XJTLU UIM 进行统一身份认证。
-                            <br />
-                            <span style={{ color: "#d9534f" }}>
-                                注意：必须使用学校邮箱登录 Exchange，因为
-                                Microsoft To Do 通常使用的是个人账户。
-                            </span>
+                            {t("settings.exchangeConnectDesc")}
                         </p>
                         <form onSubmit={executeConnectExchange}>
                             <Input
-                                label="学校邮箱"
+                                label={t("settings.schoolEmail")}
                                 type="email"
                                 id="exchangeEmail"
                                 value={exchangeEmail}
@@ -1238,7 +1509,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     setExchangeEmail(e.target.value)
                                 }
                                 required
-                                placeholder="例如: san.zhang23@student.xjtlu.edu.cn"
+                                placeholder={t("settings.exchangePlaceholder")}
                             />
                             <div
                                 style={{
@@ -1255,9 +1526,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         setShowExchangeConnectModal(false)
                                     }
                                 >
-                                    取消
+                                    {t("common.cancel")}
                                 </Button>
-                                <Button type="submit">前往认证</Button>
+                                <Button type="submit">
+                                    {t("settings.goToAuth")}
+                                </Button>
                             </div>
                         </form>
                     </div>
@@ -1266,37 +1539,31 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                 <Modal
                     isOpen={showSmtpConnectModal}
                     onClose={() => setShowSmtpConnectModal(false)}
-                    title="连接 SMTP/IMAP 邮箱"
+                    title={t("settings.connectSmtpImap")}
                 >
                     <div className="smtp-connect-modal">
                         <p
                             className="modal-description"
                             style={{
                                 marginBottom: "15px",
-                                color: "#666",
+                                color: "var(--color-text-secondary)",
                                 fontSize: "14px",
                             }}
                         >
-                            请输入您的邮箱 IMAP/SMTP 服务器信息以连接邮箱。
-                            <br />
-                            常见设置:
-                            <br />• QQ邮箱: imap.qq.com / 993 / TLS
-                            <br />• 163邮箱: imap.163.com / 993 / TLS
-                            <br />• Gmail: imap.gmail.com / 993 / TLS
-                            <br />• Outlook: outlook.office365.com / 993 / TLS
+                            {t("settings.smtpImapDesc")}
                         </p>
                         <form onSubmit={executeConnectSmtp}>
                             <Input
-                                label="邮箱地址"
+                                label={t("settings.emailAddress")}
                                 type="email"
                                 id="smtpEmail"
                                 value={smtpEmail}
                                 onChange={(e) => setSmtpEmail(e.target.value)}
                                 required
-                                placeholder="例如: example@qq.com"
+                                placeholder={t("settings.emailPlaceholder")}
                             />
                             <Input
-                                label="邮箱密码/授权码"
+                                label={t("settings.passwordOrAuthCode")}
                                 type="password"
                                 id="smtpPassword"
                                 value={smtpPassword}
@@ -1304,21 +1571,25 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     setSmtpPassword(e.target.value)
                                 }
                                 required
-                                placeholder="请输入邮箱密码或IMAP授权码"
+                                placeholder={t(
+                                    "settings.passwordOrAuthCodePlaceholder",
+                                )}
                             />
                             <Input
-                                label="IMAP 服务器"
+                                label={t("settings.imapServer")}
                                 type="text"
                                 id="smtpHost"
                                 value={smtpHost}
                                 onChange={(e) => setSmtpHost(e.target.value)}
                                 required
-                                placeholder="例如: imap.qq.com"
+                                placeholder={t(
+                                    "settings.imapServerPlaceholder",
+                                )}
                             />
                             <div style={{ display: "flex", gap: "10px" }}>
                                 <div style={{ flex: 1 }}>
                                     <Input
-                                        label="端口"
+                                        label={t("settings.port")}
                                         type="number"
                                         id="smtpPort"
                                         value={String(smtpPort)}
@@ -1353,7 +1624,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                                 setSmtpTls(e.target.checked)
                                             }
                                         />
-                                        TLS 加密
+                                        {t("settings.useTls")}
                                     </label>
                                 </div>
                             </div>
@@ -1372,10 +1643,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         setShowSmtpConnectModal(false)
                                     }
                                 >
-                                    取消
+                                    {t("common.cancel")}
                                 </Button>
                                 <Button type="submit" disabled={loading}>
-                                    {loading ? "连接中..." : "确认绑定"}
+                                    {loading
+                                        ? t("common.connecting")
+                                        : t("settings.confirmBind")}
                                 </Button>
                             </div>
                         </form>
@@ -1385,27 +1658,29 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                 <Modal
                     isOpen={showUnboundModal}
                     onClose={() => setShowUnboundModal(false)}
-                    title="账号绑定提醒"
+                    title={t("settings.accountBindReminder")}
                     footer={
                         <Button onClick={() => setShowUnboundModal(false)}>
-                            我知道了
+                            {t("common.gotIt")}
                         </Button>
                     }
                 >
-                    <p>检测到您有尚未绑定的账号：</p>
+                    <p>{t("settings.unboundAccountsDetected")}</p>
                     <ul style={{ paddingLeft: "20px", margin: "10px 0" }}>
                         {!msTodoStatus?.connected && (
-                            <li>Microsoft To Do 未连接</li>
+                            <li>{t("settings.msTodoNotConnected")}</li>
                         )}
-                        {!ebridgeStatus?.connected && <li>Ebridge 未连接</li>}
+                        {!ebridgeStatus?.connected && (
+                            <li>{t("settings.ebridgeNotConnected")}</li>
+                        )}
                     </ul>
-                    <p>为了确保功能正常使用，请尽快完成绑定。</p>
+                    <p>{t("settings.bindReminderMessage")}</p>
                 </Modal>
 
                 <Modal
                     isOpen={showDeleteConfirmModal}
                     onClose={() => setShowDeleteConfirmModal(false)}
-                    title="确认删除"
+                    title={t("common.confirmDelete")}
                     footer={
                         <div
                             style={{
@@ -1418,18 +1693,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                 variant="secondary"
                                 onClick={() => setShowDeleteConfirmModal(false)}
                             >
-                                取消
+                                {t("common.cancel")}
                             </Button>
                             <Button
                                 variant="danger"
                                 onClick={executeDeleteTimetable}
                             >
-                                确认删除
+                                {t("common.confirmDelete")}
                             </Button>
                         </div>
                     }
                 >
-                    <p>确定要删除所有课程表导入的日程吗？此操作无法撤销。</p>
+                    <p>{t("settings.confirmDeleteTimetable")}</p>
                 </Modal>
 
                 <Modal
@@ -1438,7 +1713,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                     title={resultModalData.title}
                     footer={
                         <Button onClick={() => setShowResultModal(false)}>
-                            确定
+                            {t("common.confirm")}
                         </Button>
                     }
                 >
@@ -1457,29 +1732,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                 <Modal
                     isOpen={showCalDavModal}
                     onClose={() => setShowCalDavModal(false)}
-                    title="连接 CalDAV 日历"
+                    title={t("settings.connectCaldav")}
                 >
                     <div className="smtp-connect-modal">
                         <p
                             className="modal-description"
                             style={{
                                 marginBottom: "15px",
-                                color: "#666",
+                                color: "var(--color-text-secondary)",
                                 fontSize: "14px",
                             }}
                         >
-                            请输入您的 CalDAV 服务器信息以连接外部日历。
-                            <br />
-                            常见设置:
-                            <br />• iCloud: caldav.icloud.com / 你的 Apple ID
-                            <br />• Google Calendar:
-                            apidata.googleusercontent.com/caldav/v2
-                            <br />• Nextcloud: your-nextcloud.com/remote.php/dav
-                            <br />• Baikal / Radicale: 填写您的自建服务器地址
+                            {t("settings.caldavConnectDesc")}
                         </p>
                         <form onSubmit={executeConnectCalDav}>
                             <Input
-                                label="CalDAV 服务器地址 (Base URL)"
+                                label={t("settings.caldavBaseUrl")}
                                 type="url"
                                 id="calDavBaseUrl"
                                 value={calDavBaseUrl}
@@ -1487,10 +1755,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     setCalDavBaseUrl(e.target.value)
                                 }
                                 required
-                                placeholder="例如: https://caldav.icloud.com"
+                                placeholder={t("settings.caldavUrlPlaceholder")}
                             />
                             <Input
-                                label="用户名"
+                                label={t("settings.username")}
                                 type="text"
                                 id="calDavUsername"
                                 value={calDavUsername}
@@ -1498,10 +1766,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     setCalDavUsername(e.target.value)
                                 }
                                 required
-                                placeholder="CalDAV 账户用户名"
+                                placeholder={t(
+                                    "settings.caldavUsernamePlaceholder",
+                                )}
                             />
                             <Input
-                                label="密码 / 应用专用密码"
+                                label={t("settings.passwordAppSpecific")}
                                 type="password"
                                 id="calDavPassword"
                                 value={calDavPassword}
@@ -1509,7 +1779,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     setCalDavPassword(e.target.value)
                                 }
                                 required
-                                placeholder="请输入密码或应用专用密码"
+                                placeholder={t("settings.passwordPlaceholder")}
                             />
                             <div
                                 style={{
@@ -1524,10 +1794,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     variant="secondary"
                                     onClick={() => setShowCalDavModal(false)}
                                 >
-                                    取消
+                                    {t("common.cancel")}
                                 </Button>
                                 <Button type="submit" disabled={calDavLoading}>
-                                    {calDavLoading ? "连接中..." : "确认绑定"}
+                                    {calDavLoading
+                                        ? t("common.connecting")
+                                        : t("settings.confirmBind")}
                                 </Button>
                             </div>
                         </form>
@@ -1538,11 +1810,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                     isOpen={showCalDavSyncModal}
                     onClose={() => setShowCalDavSyncModal(false)}
                     title={
-                        calDavSyncError ? "CalDAV 同步失败" : "CalDAV 同步结果"
+                        calDavSyncError
+                            ? t("settings.caldavSyncFailed")
+                            : t("settings.caldavSyncResult")
                     }
                     footer={
                         <Button onClick={() => setShowCalDavSyncModal(false)}>
-                            确定
+                            {t("common.confirm")}
                         </Button>
                     }
                 >
@@ -1560,14 +1834,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                         >
                             <div
                                 style={{
-                                    background: "#f0fdf4",
+                                    background: "var(--color-success-50)",
                                     padding: "12px",
                                     borderRadius: "8px",
                                 }}
                             >
-                                <strong>
-                                    拉取 (Pull) - 从外部日历同步到本平台：
-                                </strong>
+                                <strong>{t("settings.caldavPull")}</strong>
                                 <ul
                                     style={{
                                         margin: "8px 0 0 20px",
@@ -1575,33 +1847,34 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     }}
                                 >
                                     <li>
-                                        新建: {calDavSyncResult.pulled.created}
+                                        {t("settings.newItems")}:{" "}
+                                        {calDavSyncResult.pulled.created}
                                     </li>
                                     <li>
-                                        更新: {calDavSyncResult.pulled.updated}
+                                        {t("settings.updatedItems")}:{" "}
+                                        {calDavSyncResult.pulled.updated}
                                     </li>
                                     <li>
-                                        跳过冲突:{" "}
+                                        {t("settings.skippedConflicts")}:{" "}
                                         {
                                             calDavSyncResult.pulled
                                                 .skippedConflicts
                                         }
                                     </li>
                                     <li>
-                                        错误: {calDavSyncResult.pulled.errors}
+                                        {t("settings.errors")}:{" "}
+                                        {calDavSyncResult.pulled.errors}
                                     </li>
                                 </ul>
                             </div>
                             <div
                                 style={{
-                                    background: "#eff6ff",
+                                    background: "var(--color-primary-50)",
                                     padding: "12px",
                                     borderRadius: "8px",
                                 }}
                             >
-                                <strong>
-                                    推送 (Push) - 从本平台同步到外部日历：
-                                </strong>
+                                <strong>{t("settings.caldavPush")}</strong>
                                 <ul
                                     style={{
                                         margin: "8px 0 0 20px",
@@ -1609,20 +1882,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     }}
                                 >
                                     <li>
-                                        新建: {calDavSyncResult.pushed.created}
+                                        {t("settings.newItems")}:{" "}
+                                        {calDavSyncResult.pushed.created}
                                     </li>
                                     <li>
-                                        更新: {calDavSyncResult.pushed.updated}
+                                        {t("settings.updatedItems")}:{" "}
+                                        {calDavSyncResult.pushed.updated}
                                     </li>
                                     <li>
-                                        跳过冲突:{" "}
+                                        {t("settings.skippedConflicts")}:{" "}
                                         {
                                             calDavSyncResult.pushed
                                                 .skippedConflicts
                                         }
                                     </li>
                                     <li>
-                                        错误: {calDavSyncResult.pushed.errors}
+                                        {t("settings.errors")}:{" "}
+                                        {calDavSyncResult.pushed.errors}
                                     </li>
                                 </ul>
                             </div>
@@ -1633,7 +1909,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                 <Modal
                     isOpen={showWeekModal}
                     onClose={() => setShowWeekModal(false)}
-                    title="设置当前周数"
+                    title={t("settings.setCurrentWeek")}
                     footer={
                         <div
                             style={{
@@ -1647,7 +1923,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                 onClick={() => setShowWeekModal(false)}
                                 disabled={weekLoading}
                             >
-                                取消
+                                {t("common.cancel")}
                             </Button>
                             <Button
                                 onClick={async () => {
@@ -1655,20 +1931,27 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     setWeekLoading(true);
                                     try {
                                         if (desiredWeek === "")
-                                            throw new Error("请输入周数");
+                                            throw new Error(
+                                                t("settings.pleaseEnterWeek"),
+                                            );
                                         await setCurrentWeek(
                                             Number(desiredWeek),
                                         );
                                         setShowWeekModal(false);
                                     } catch (err: any) {
-                                        setWeekError(err.message || "设置失败");
+                                        setWeekError(
+                                            err.message ||
+                                                t("settings.setFailed"),
+                                        );
                                     } finally {
                                         setWeekLoading(false);
                                     }
                                 }}
                                 disabled={weekLoading}
                             >
-                                {weekLoading ? "保存中..." : "保存"}
+                                {weekLoading
+                                    ? t("common.saving")
+                                    : t("common.save")}
                             </Button>
                         </div>
                     }
@@ -1681,21 +1964,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                         }}
                     >
                         <div>
-                            <strong>当前周（含偏移）: </strong>
-                            {weekInfo ? weekInfo.effectiveWeek : "加载中..."}
+                            <strong>{t("settings.currentWeek")}: </strong>
+                            {weekInfo
+                                ? weekInfo.effectiveWeek
+                                : t("common.loading")}
                         </div>
                         <div>
                             <small>
-                                学年基准周:{" "}
+                                {t("settings.academicBaseWeek")}:{" "}
                                 {weekInfo ? weekInfo.rawWeekNumber : "-"},
-                                全局偏移:{" "}
+                                {t("settings.globalOffset")}:{" "}
                                 {weekInfo ? weekInfo.globalWeekOffset : "-"},
-                                您的偏移:{" "}
+                                {t("settings.yourOffset")}:{" "}
                                 {weekInfo ? weekInfo.userWeekOffset : "-"}
                             </small>
                         </div>
                         <Input
-                            label="设置当前周数"
+                            label={t("settings.setCurrentWeek")}
                             type="number"
                             id="desiredWeekModal"
                             value={desiredWeek}
@@ -1706,7 +1991,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                         : parseInt(e.target.value),
                                 )
                             }
-                            placeholder="输入想要的当前周（例如 5）"
+                            placeholder={t("settings.desiredWeekPlaceholder")}
                         />
                         {weekError && (
                             <div className="error-message">{weekError}</div>
@@ -1717,7 +2002,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                 <Modal
                     isOpen={showCalDavServerDetailModal}
                     onClose={() => setShowCalDavServerDetailModal(false)}
-                    title="平台 CalDAV 连接信息"
+                    title={t("settings.caldavConnectionInfo")}
                 >
                     <div className="conn-table caldav-server-detail">
                         <CalDavConnectionCard
@@ -1730,6 +2015,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                         />
                     </div>
                 </Modal>
+                <ShareModal
+                    isOpen={showShareModal}
+                    onClose={() => setShowShareModal(false)}
+                />
             </main>
         </div>
     );
