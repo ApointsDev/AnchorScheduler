@@ -1,0 +1,124 @@
+// 任务（Task）相关 API 请求/响应类型
+// 注意：这些类型仅用于编译期约束，不参与运行时校验
+import type { Task } from "../index";
+import type { RecurrenceRule, ScheduleType } from "../Services/types";
+
+export interface TaskCreateRequest {
+    name: string;
+    description?: string;
+    startTime: string; // ISO
+    endTime: string; // ISO
+    dueDate?: string; // ISO
+    location?: string;
+    boundaryConflict?: boolean; // 请求级覆盖用户级边界模式
+    recurrenceRule?: RecurrenceRule;
+    scheduleType?: ScheduleType;
+}
+
+export interface TaskCreateResponse {
+    task: Task;
+}
+
+export interface TaskConflictDetail {
+    id: string;
+    name?: string;
+    startTime?: string | null;
+    endTime?: string | null;
+}
+
+export interface TaskConflictResponse {
+    error: "conflict";
+    message: string;
+    candidate: TaskConflictDetail;
+    conflicts: TaskConflictDetail[];
+}
+
+export interface ConflictPreCheckRequest {
+    startTime: string; // ISO
+    endTime: string; // ISO
+    boundaryConflict?: boolean;
+}
+
+export interface ConflictPreCheckResponse {
+    conflicts: TaskConflictDetail[];
+}
+
+export interface BatchTaskItemInput extends TaskCreateRequest {}
+
+export interface BatchTaskCreateRequest {
+    tasks: BatchTaskItemInput[];
+    boundaryConflict?: boolean; // 批量请求统一覆盖（单项内存在则以单项为准）
+}
+
+export interface BatchTaskCreateItemResult {
+    input: BatchTaskItemInput;
+    status: "created" | "conflict" | "error";
+    task?: Task;
+    conflictList?: TaskConflictDetail[];
+    errorMessage?: string;
+}
+
+export interface BatchTaskCreateResponse {
+    results: BatchTaskCreateItemResult[];
+    summary: {
+        total: number;
+        created: number;
+        conflicts: number;
+        errors: number;
+    };
+}
+
+export interface ConflictModeUpdateRequest {
+    boundaryConflictInclusive: boolean; // true: 端点相接算冲突
+}
+
+export interface ConflictModeUpdateResponse {
+    boundaryConflictInclusive: boolean;
+    updatedAt: string;
+}
+
+// ---- 任务更新 / 删除 / 列表 ----
+
+export interface TaskUpdateRequest {
+    name?: string;
+    description?: string;
+    startTime?: string; // ISO
+    endTime?: string; // ISO
+    dueDate?: string; // ISO
+    location?: string;
+    completed?: boolean;
+    boundaryConflict?: boolean; // 请求级覆盖
+    recurrenceRule?: RecurrenceRule | null; // null 表示移除重复规则
+    scheduleType?: ScheduleType;
+}
+
+// 重复任务生成统计
+export interface RecurrenceSummary {
+    createdInstances: number;
+    conflictInstances: number;
+    errorInstances: number;
+    requestedRule?: any;
+}
+
+export interface TaskUpdateResponse {
+    task: Task;
+}
+
+export interface TaskDeleteResponse {
+    id: string;
+    deleted: boolean;
+}
+
+export interface TaskListQueryParams {
+    start?: string; // ISO (过滤区间开始)
+    end?: string; // ISO (过滤区间结束)
+    limit?: number;
+    offset?: number;
+}
+
+export interface TaskListResponse {
+    tasks: Task[];
+    total: number;
+    limit: number;
+    offset: number;
+}

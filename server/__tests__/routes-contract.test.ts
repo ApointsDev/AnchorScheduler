@@ -38,13 +38,27 @@ const COMMENTED_OUT_ROUTES = new Set([
 ]);
 
 describe("Route registration contract (snapshot-based)", () => {
-  // ── apiRoutes ──────────────────────────────────────────────
+  // ── apiRoutes（按 scope 拆分后的子模块聚合）──────────────────
   describe("apiRoutes.ts", () => {
     let routes: string[];
 
+    // apiRoutes.ts 为聚合器，实际路由注册分布在各 scope 子模块中
+    const API_SUBMODULES = [
+      "chatRoutes.ts",
+      "statusRoutes.ts",
+      "integrationRoutes.ts",
+      "caldavRoutes.ts",
+      "settingsRoutes.ts",
+      "taskRoutes.ts",
+      "scheduleQueueRoutes.ts",
+      "emailRoutes.ts",
+      "userRoutes.ts",
+      "shareRoutes.ts",
+    ];
+
     beforeAll(() => {
-      routes = extractRoutesFromSource(
-        path.join(ROUTES_DIR, "apiRoutes.ts"),
+      routes = API_SUBMODULES.flatMap((file) =>
+        extractRoutesFromSource(path.join(ROUTES_DIR, file)),
       ).filter((r) => !COMMENTED_OUT_ROUTES.has(r));
     });
 

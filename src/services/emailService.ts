@@ -3,7 +3,7 @@
  * 供 MyMail 页面和 MCP 工具共同使用，避免重复耦合
  */
 
-import { getToken, customFetch, type EmailListItem, type RawEmail } from "./api";
+import { getToken, customFetch, type EmailListItem } from "./api";
 
 export interface EmailSearchParams {
     query: string;

@@ -42,3 +42,6 @@ docker-run.sh
 docker-run.ps1
 *.zip
 .deepseek/
+
+# 重构备份（拆分前的原文件）
+.refactor-backup

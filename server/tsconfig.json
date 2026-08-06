@@ -1,0 +1,15 @@
+{
+  // 供 VS Code / 编辑器语言服务识别 server 项目使用。
+  // VS Code 只识别名为 tsconfig.json 的配置；根 tsconfig.json（solution）的
+  // references 未包含 server，导致此前 server/*.ts（含 __tests__）落入"推断项目"，
+  // 无法自动加载 @types/jest（describe/test/expect 标红）。
+  // 此文件继承 tsconfig.server.json，仅用于类型检查（noEmit），不影响 CLI 与构建。
+  "extends": "../tsconfig.server.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "outDir": "../server/dist",
+    "rootDir": "."
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["dist", "node_modules", "../devOld"]
+}

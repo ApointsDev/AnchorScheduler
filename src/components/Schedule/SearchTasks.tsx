@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { getTasks, type Task } from "../../services/api";
 import { format, parseISO } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
-import { Search, Loader2, Calendar, CheckCircle2, Circle } from "lucide-react";
+import { Calendar, CheckCircle2, Circle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
 import { Button } from "../ui/Button";
 import SearchBar from "../ui/SearchBar";
