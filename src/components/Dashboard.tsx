@@ -46,6 +46,7 @@ import AIChat from "./AIChat/AIChat";
 import MyMail from "./MyMail/MyMail";
 import ShareModal from "./Share/ShareModal";
 import LoadingSpinner from "./ui/LoadingSpinner";
+import MembershipPage from "./Membership/MembershipPage";
 import { MobileActionBarProvider } from "./ui/MobileActionBar";
 import { useWeek } from "../context/WeekContext";
 import { useTheme } from "../utils/useTheme";
@@ -68,6 +69,7 @@ import {
     Download,
     Mail,
     Share2,
+    Crown,
 } from "lucide-react";
 import ThemeSwitcher from "./ThemeSwitcher";
 import "../styles/Dashboard.css";
@@ -1012,6 +1014,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
         if (view === "logs") return <LogViewer />;
         if (view === "chat") return <AIChat />;
         if (view === "mail") return <MyMail />;
+        if (view === "membership") return <MembershipPage />;
 
         // Default Dashboard View
         return (
@@ -1374,6 +1377,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             >
                 <FileText size={20} />
                 <span className="nav-text">{t("nav.systemLogs")}</span>
+            </button>
+
+            {/* Membership Section */}
+            <div className="sidebar-section-header">
+                {t("nav.sectionMembership")}
+            </div>
+            <button
+                className={`nav-item ${view === "membership" ? "active" : ""}`}
+                onClick={() => handleNavClick("/membership")}
+            >
+                <Crown size={20} />
+                <span className="nav-text">{t("nav.membership")}</span>
             </button>
         </>
     );

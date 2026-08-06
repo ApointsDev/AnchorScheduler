@@ -100,6 +100,7 @@ exports[`Route registration contract (snapshot-based) authRoutes.ts should have 
   "GET /auth/exchange",
   "GET /auth/exchange/callback",
   "POST /api/auth/caf/token",
+  "POST /api/auth/refresh",
   "POST /auth/imap/bind",
   "POST /auth/imap/unbind",
 ]

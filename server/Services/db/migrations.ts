@@ -623,4 +623,78 @@ export async function runMigrations(db: Database): Promise<void> {
       (e as Error).message
     );
   }
+
+  // ── 会员与兑换码（MENU-001）────────────────────────────
+  // user_memberships：用户的等级权益（每行一段 startDate~endDate 的有效期）
+  await db.exec(`
+        CREATE TABLE IF NOT EXISTS user_memberships (
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            tier TEXT NOT NULL,
+            startDate TEXT NOT NULL,
+            endDate TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'purchase',
+            orderId TEXT,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        );
+    `);
+  await db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_user_memberships_user ON user_memberships(userId, endDate);`
+  );
+
+  // membership_orders：购买订单（含状态，支持恢复购买）
+  await db.exec(`
+        CREATE TABLE IF NOT EXISTS membership_orders (
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            tier TEXT NOT NULL,
+            days INTEGER NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            currency TEXT NOT NULL DEFAULT 'CNY',
+            status TEXT NOT NULL DEFAULT 'pending',
+            provider TEXT NOT NULL DEFAULT 'mock',
+            granted INTEGER NOT NULL DEFAULT 0,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        );
+    `);
+  await db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_membership_orders_user ON membership_orders(userId, createdAt);`
+  );
+
+  // redeem_codes：兑换码（maxUses 为空表示不限次数）
+  await db.exec(`
+        CREATE TABLE IF NOT EXISTS redeem_codes (
+            code TEXT PRIMARY KEY,
+            tier TEXT NOT NULL,
+            days INTEGER NOT NULL,
+            maxUses INTEGER,
+            usedCount INTEGER NOT NULL DEFAULT 0,
+            expiresAt DATETIME,
+            active INTEGER NOT NULL DEFAULT 1,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            createdBy TEXT
+        );
+    `);
+
+  // redeem_code_redemptions：兑换记录（防重复使用依据）
+  await db.exec(`
+        CREATE TABLE IF NOT EXISTS redeem_code_redemptions (
+            id TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            userId TEXT NOT NULL,
+            tier TEXT NOT NULL,
+            days INTEGER NOT NULL,
+            previousEndDate DATETIME,
+            newEndDate DATETIME,
+            redeemedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        );
+    `);
+  await db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_redeem_redemptions_user_code
+         ON redeem_code_redemptions(userId, code);`
+  );
 }

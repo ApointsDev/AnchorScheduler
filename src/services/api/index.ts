@@ -13,6 +13,9 @@ export {
     getToken,
     removeToken,
     isAuthenticated,
+    setRefreshToken,
+    getRefreshToken,
+    removeRefreshToken,
 } from "./client";
 
 // ── 认证 ──────────────────────────────────────────────
@@ -145,3 +148,23 @@ export type { ShareLink, SharedScheduleView } from "./share";
 // ── 语音识别 ──────────────────────────────────────────
 export { getSpeechStatus, recognizeSpeech } from "./speech";
 export type { SpeechRecognizeResult, SpeechStatus } from "./speech";
+
+// ── 会员与兑换码（MENU-001）────────────────────────────
+export {
+    getMembership,
+    getMembershipPlans,
+    purchaseMembership,
+    restoreMembershipPurchase,
+    getMembershipOrders,
+    validateRedeemCode,
+    redeemCode,
+} from "./membership";
+export type {
+    MembershipView,
+    MembershipSummary,
+    MembershipTier,
+    MembershipOrder,
+    MembershipGrant,
+    RedeemResult,
+    PlansResponse,
+} from "./membership";

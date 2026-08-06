@@ -393,5 +393,74 @@ export function createAdminRouter() {
         }
     });
 
+    // ── 会员与兑换码（MENU-001）──────────────────────────────
+
+    // GET /api/admin/membership/redeem-codes → 兑换码列表
+    router.get("/membership/redeem-codes", async (_req: any, res: any) => {
+        try {
+            const codes = await dbService.listRedeemCodes();
+            res.json({ codes });
+        } catch (error: any) {
+            logger.error("Admin list redeem codes error:", error);
+            res.status(500).json({ error: "获取兑换码列表失败" });
+        }
+    });
+
+    // POST /api/admin/membership/redeem-codes
+    // body: { tier, days, count?, maxUses?, expiresAt? } → 批量生成兑换码
+    router.post("/membership/redeem-codes", async (req: any, res: any) => {
+        try {
+            const { tier, days, count = 1, maxUses = 1, expiresAt } =
+                req.body || {};
+            const numCount = Math.max(
+                1,
+                Math.min(50, parseInt(count, 10) || 1),
+            );
+            const codes = [];
+            for (let i = 0; i < numCount; i++) {
+                const code = await dbService.createRedeemCode({
+                    tier: String(tier || ""),
+                    days: parseInt(days, 10) || 0,
+                    maxUses: maxUses != null ? parseInt(maxUses, 10) : null,
+                    expiresAt: expiresAt || null,
+                    createdBy: (req.user as any)?.email || "admin",
+                });
+                codes.push(code);
+            }
+            res.json({ codes, count: codes.length });
+        } catch (error: any) {
+            logger.error("Admin create redeem codes error:", error);
+            res.status(400).json({
+                error: "生成兑换码失败: " + (error.message || ""),
+            });
+        }
+    });
+
+    // POST /api/admin/membership/grant
+    // body: { userId, tier, days } → 直接为用户发放会员权益
+    router.post("/membership/grant", async (req: any, res: any) => {
+        try {
+            const { userId, tier, days } = req.body || {};
+            if (!userId || !tier || !days) {
+                return res.status(400).json({ error: "缺少 userId/tier/days" });
+            }
+            const user = await dbService.getUserById(userId);
+            if (!user) return res.status(404).json({ error: "用户不存在" });
+            const grant = await dbService.grantMembership(
+                String(userId),
+                String(tier),
+                parseInt(days, 10),
+                "admin_grant",
+            );
+            const membership = await dbService.getMembershipSummary(String(userId));
+            res.json({ grant, membership });
+        } catch (error: any) {
+            logger.error("Admin grant membership error:", error);
+            res.status(400).json({
+                error: "发放会员失败: " + (error.message || ""),
+            });
+        }
+    });
+
     return router;
 }

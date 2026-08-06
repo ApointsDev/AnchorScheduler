@@ -22,8 +22,10 @@ import {
 export interface AuthRouteContext {
     /** 用户缓存 Map */
     userCache: Map<string, User>;
-    /** 签发 JWT */
+    /** 签发 JWT（访问令牌） */
     signJwt(payload: object): string;
+    /** 签发刷新令牌 */
+    signRefreshJwt(payload: object): string;
     /** 验证 JWT */
     verifyJwt(token: string): any;
     /** 按邮箱查找用户 */
@@ -69,6 +71,7 @@ export function createAuthRoutes(ctx: AuthRouteContext): express.Router {
     const {
         userCache,
         signJwt,
+        signRefreshJwt,
         verifyJwt,
         findUserByEmail,
         authenticateToken,
@@ -371,18 +374,22 @@ export function createAuthRoutes(ctx: AuthRouteContext): express.Router {
                 .send("No authorization code provided by CAF.");
 
         try {
-            const { jwtToken, email } = await handleCafCodeExchange(
+            const { jwtToken, refreshToken, email } = await handleCafCodeExchange(
                 cafLookup,
                 cafConfig,
                 code,
                 cafConfig.redirectUri,
                 signJwt,
+                signRefreshJwt,
             );
             const emailParam = email
                 ? `&email=${encodeURIComponent(email)}`
                 : "";
+            const refreshParam = refreshToken
+                ? `&refresh_token=${encodeURIComponent(refreshToken)}`
+                : "";
             return res.redirect(
-                `${frontendUrl}/login?token=${encodeURIComponent(jwtToken)}&from=caf${emailParam}`,
+                `${frontendUrl}/login?token=${encodeURIComponent(jwtToken)}&from=caf${emailParam}${refreshParam}`,
             );
         } catch (error: any) {
             logger.error(
@@ -399,14 +406,16 @@ export function createAuthRoutes(ctx: AuthRouteContext): express.Router {
         if (!code) return res.status(400).json({ error: "code is required" });
 
         try {
-            const { jwtToken, email, name } = await handleCafCodeExchange(
-                cafLookup,
-                cafConfig,
-                code,
-                cafConfig.mobileRedirectUri,
-                signJwt,
-            );
-            res.json({ token: jwtToken, email, name });
+            const { jwtToken, refreshToken, email, name } =
+                await handleCafCodeExchange(
+                    cafLookup,
+                    cafConfig,
+                    code,
+                    cafConfig.mobileRedirectUri,
+                    signJwt,
+                    signRefreshJwt,
+                );
+            res.json({ token: jwtToken, refreshToken, email, name });
         } catch (error: any) {
             logger.error(
                 "CAF mobile token exchange failed:",
@@ -416,6 +425,41 @@ export function createAuthRoutes(ctx: AuthRouteContext): express.Router {
                 error: error.message || "CAF 登录失败，请稍后重试",
             });
         }
+    });
+
+    // ── 刷新令牌 ─────────────────────────────────────────────
+    // 用 refresh token 换发新的访问令牌与刷新令牌（滑动续期）
+    router.post("/api/auth/refresh", async (req, res) => {
+        const { refreshToken } = req.body || {};
+        if (!refreshToken || typeof refreshToken !== "string") {
+            return res
+                .status(400)
+                .json({ error: "refreshToken is required" });
+        }
+
+        const decoded = verifyJwt(refreshToken);
+        if (!decoded || decoded.type !== "refresh" || !decoded.sub) {
+            return res
+                .status(401)
+                .json({ error: "Invalid or expired refresh token" });
+        }
+
+        let user = userCache.get(decoded.sub);
+        if (!user) {
+            user = (await dbService.getUserById(decoded.sub)) || undefined;
+            if (user) userCache.set(user.id, user);
+        }
+        if (!user) {
+            return res.status(401).json({ error: "User not found" });
+        }
+
+        const token = signJwt({ sub: user.id, email: user.email });
+        const newRefreshToken = signRefreshJwt({
+            sub: user.id,
+            email: user.email,
+        });
+
+        return res.json({ token, refreshToken: newRefreshToken });
     });
 
     return router;

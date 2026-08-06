@@ -32,6 +32,7 @@ import { initializeRejectionBufferRoutes } from "./routes/rejectionBufferRoutes.
 import { initializeChaoxingRoutes } from "./routes/chaoxingRoutes";
 import { initializeReminderStateRoutes } from "./routes/reminderStateRoutes";
 import { initializeArchiveRoutes } from "./routes/archiveRoutes.js";
+import { initializeMembershipRoutes } from "./routes/membershipRoutes.js";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
@@ -112,9 +113,18 @@ const userCache: Map<string, User> = new Map();
 
 const JWT_SECRET = process.env.JWT_SECRET || "";
 const JWT_EXPIRES_IN = "1h";
+// 刷新令牌有效期（滑动续期，避免用户活跃使用时每 1 小时被强制下线）
+const JWT_REFRESH_EXPIRES_IN = "30d";
 
 function signJwt(payload: object) {
     return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+}
+
+/** 签发刷新令牌（带 type: "refresh" 标记，供 /api/auth/refresh 换发新令牌） */
+function signRefreshJwt(payload: object) {
+    return jwt.sign({ ...payload, type: "refresh" }, JWT_SECRET, {
+        expiresIn: JWT_REFRESH_EXPIRES_IN,
+    });
 }
 
 function verifyJwt(token: string) {
@@ -353,6 +363,7 @@ app.use(
     createAuthRoutes({
         userCache,
         signJwt,
+        signRefreshJwt,
         verifyJwt,
         findUserByEmail,
         findUserByCafSub,
@@ -371,6 +382,9 @@ app.use("/api", initializeTodoRoutes(authenticateToken));
 
 // 归档路由（ARC-001）
 app.use("/api", initializeArchiveRoutes(authenticateToken));
+
+// 会员与兑换码路由（MENU-001）
+app.use("/api", initializeMembershipRoutes(authenticateToken));
 
 // 用户状态统计路由
 app.use("/api", initializeUserStatusRoutes(authenticateToken));
@@ -502,7 +516,9 @@ async function startServer() {
 }
 
 startServer();
-startIntervals(() => userCache.values());
+startIntervals(() => userCache.values()).catch((e: any) =>
+    logger.error("Failed to start intervals:", e?.message || e),
+);
 
 // ── 导出的工具函数 ─────────────────────────────────────────
 

@@ -85,8 +85,8 @@ export class TagStore {
                 `INSERT INTO tags (id, userId, name, color, lastActivityAt) VALUES (?, ?, ?, ?, ?)`,
                 [id, userId, name, input.color || null, toShanghaiISO()],
             );
-        } catch (e: any) {
-            const msg = String(e?.message || e);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
             if (msg.includes("UNIQUE") || msg.includes("unique")) {
                 throw new TagConflictError(`Tag name already exists: ${name}`);
             }
@@ -121,8 +121,8 @@ export class TagStore {
                 `UPDATE tags SET name = ?, color = ?, lastActivityAt = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ? AND userId = ?`,
                 [name, color, toShanghaiISO(), tagId, userId],
             );
-        } catch (e: any) {
-            const msg = String(e?.message || e);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
             if (msg.includes("UNIQUE") || msg.includes("unique")) {
                 throw new TagConflictError(`Tag name already exists: ${name}`);
             }
@@ -136,7 +136,7 @@ export class TagStore {
 
     async delete(userId: string, tagId: string): Promise<boolean> {
         // CASCADE 清 todo_tags；待办本体保留
-        const result: any = await this.db.run(
+        const result = await this.db.run(
             `DELETE FROM tags WHERE id = ? AND userId = ?`,
             [tagId, userId],
         );
@@ -160,7 +160,7 @@ export class TagStore {
                 `SELECT * FROM tags WHERE userId = ? AND id IN (${placeholders})`,
                 [userId, ...tagIds],
             );
-            const found = new Set(rows.map((r: any) => r.id));
+            const found = new Set(rows.map((r) => r.id));
             for (const id of tagIds) {
                 if (!found.has(id)) {
                     throw new TagNotFoundError(

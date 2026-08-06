@@ -16,7 +16,11 @@ import { logUserEvent } from "./Services/userLog";
 import { syncUserTimetable } from "./Services/timetable";
 import { logger } from "./Utils/logger.js";
 import jwt from "jsonwebtoken";
-import { ensureCafTokenValid, createCafConfig } from "./Services/cafAuth";
+import {
+    ensureCafTokenValid,
+    createCafConfig,
+    ensureCafClientCredentials,
+} from "./Services/cafAuth";
 import { processEmailWithLLM } from "./Services/emailProcessor";
 import type { CafConfig } from "./Services/cafAuth";
 import type { User } from "./types/models";
@@ -550,14 +554,25 @@ async function pushTasksToMsTodo(user: User): Promise<void> {
 
 // ── 主调度入口 ────────────────────────────────────────────
 
-export function startIntervals(
+export async function startIntervals(
     getUsers: () => IterableIterator<User>,
-): IntervalController {
+): Promise<IntervalController> {
     const imapRetryCount = new Map<string, ImapRetryState>();
     const MAX_IMAP_RETRIES = 3;
 
     // CAF 配置（interval 内用，从环境变量 + 持久化文件构建）
     const cafConfig = createCafConfig(""); // backendUrl 在 interval 中不用于路由，仅用于 token 刷新
+    try {
+        // 加载持久化的 CAF clientId/clientSecret（server/.caf-client.json）。
+        // 否则 refreshCafToken 会因缺少凭据直接返回 false（不发 HTTP 请求），
+        // 导致 ensureCafTokenValid 丢弃旧 token、IMAP 被跳过。
+        await ensureCafClientCredentials(cafConfig);
+    } catch (cafError: any) {
+        logger.warn(
+            "CAF client credentials unavailable for intervals, CAF token refresh will be skipped:",
+            cafError?.message || cafError,
+        );
+    }
 
     const interval1 = setInterval(async () => {
         for (const user of getUsers()) {

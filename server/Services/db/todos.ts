@@ -42,8 +42,8 @@ export class TodoStore {
             userId: string,
             type: string,
             message: string,
-            payload?: any,
-        ) => Promise<any>,
+            payload?: unknown,
+        ) => Promise<unknown>,
     ) {}
 
     private async getTagsForTodoIds(
@@ -69,10 +69,10 @@ export class TodoStore {
         return map;
     }
 
-    private async attachTags(rows: any[]): Promise<Todo[]> {
+    private async attachTags(rows: Record<string, unknown>[]): Promise<Todo[]> {
         const ids = rows.map((r) => r.id as string);
         const tagMap = await this.getTagsForTodoIds(ids);
-        return rows.map((r) => mapRowToTodo(r, tagMap.get(r.id) || []));
+        return rows.map((r) => mapRowToTodo(r, tagMap.get(r.id as string) || []));
     }
 
     private async setTodoTags(todoId: string, tags: Tag[]): Promise<void> {
@@ -307,7 +307,7 @@ export class TodoStore {
     }
 
     async delete(userId: string, todoId: string): Promise<boolean> {
-        const result: any = await this.db.run(
+        const result = await this.db.run(
             `DELETE FROM todos WHERE id = ? AND userId = ?`,
             [todoId, userId],
         );
@@ -362,7 +362,7 @@ export class TodoStore {
         opts?: TodoPageOpts,
     ): Promise<{ todos: Todo[]; total: number }> {
         const where: string[] = ["userId = ?"];
-        const params: any[] = [userId];
+        const params: unknown[] = [userId];
         // 普通列表默认排除归档；归档内容通过 /api/archive 读取
         if (!opts?.includeArchived) {
             where.push("archivedAt IS NULL");
@@ -419,7 +419,7 @@ export class TodoStore {
         const limit = Math.max(1, Math.min(500, opts?.limit || 50));
         const offset = Math.max(0, opts?.offset || 0);
 
-        const countRow: any = await this.db.get(
+        const countRow = await this.db.get<{ cnt: number }>(
             `SELECT COUNT(*) as cnt FROM todos ${whereSql}`,
             params,
         );

@@ -95,6 +95,15 @@ import { ChaoxingItemMapStore } from "./chaoxingItemMap";
 import { FollowStore, type FollowListResult, type FollowUserInfo } from "./follows";
 import { ReminderStateStore } from "./reminderStates";
 import { ArchiveStore } from "./archive";
+import {
+    MembershipStore,
+    type MembershipGrantResult,
+    type MembershipOrder,
+    type MembershipSource,
+    type MembershipSummary,
+    type RedeemCode,
+    type RedeemResult,
+} from "./membership";
 import type { TodoPageOpts } from "./todos";
 import type {
     CommunityRankMetric,
@@ -103,6 +112,14 @@ import type {
 
 export type { TodoPageOpts };
 export type { RejectionKind, RejectionListOpts };
+export type {
+    MembershipGrantResult,
+    MembershipOrder,
+    MembershipSource,
+    MembershipSummary,
+    RedeemCode,
+    RedeemResult,
+};
 
 export class DatabaseService {
     private db: Database | null = null;
@@ -128,6 +145,7 @@ export class DatabaseService {
     follows!: FollowStore;
     reminderStates!: ReminderStateStore;
     archive!: ArchiveStore;
+    membership!: MembershipStore;
 
     async initialize() {
         try {
@@ -184,6 +202,7 @@ export class DatabaseService {
                 this.todos,
                 this.tags,
             );
+            this.membership = new MembershipStore(this.db);
 
             logger.success("Database initialized successfully");
         } catch (error) {
@@ -616,6 +635,68 @@ export class DatabaseService {
     /** 自动归档（可注入时钟，测试用） */
     async autoArchiveTags(now?: Date, thresholdMonths?: number) {
         return this.archive.autoArchiveTags(now, thresholdMonths);
+    }
+
+    // ── 会员与兑换码（MENU-001）──
+    async getMembershipSummary(userId: string) {
+        return this.membership.getMembershipSummary(userId);
+    }
+    async getEffectiveMembership(userId: string) {
+        return this.membership.getEffectiveMembership(userId);
+    }
+    async grantMembership(
+        userId: string,
+        tier: string,
+        days: number,
+        source: MembershipSource,
+        orderId?: string,
+    ) {
+        return this.membership.grantMembership(
+            userId,
+            tier,
+            days,
+            source,
+            orderId,
+        );
+    }
+    async createMembershipOrder(
+        userId: string,
+        tier: string,
+        days: number,
+        amount: number,
+        provider?: string,
+    ) {
+        return this.membership.createOrder(
+            userId,
+            tier,
+            days,
+            amount,
+            provider,
+        );
+    }
+    async completeMembershipOrder(userId: string, orderId: string) {
+        return this.membership.completeOrder(userId, orderId);
+    }
+    async listMembershipOrders(userId: string) {
+        return this.membership.listOrders(userId);
+    }
+    async restoreMembershipPurchases(userId: string) {
+        return this.membership.restorePurchases(userId);
+    }
+    async createRedeemCode(params: Parameters<MembershipStore["createRedeemCode"]>[0]) {
+        return this.membership.createRedeemCode(params);
+    }
+    async listRedeemCodes() {
+        return this.membership.listRedeemCodes();
+    }
+    async getRedeemCode(code: string) {
+        return this.membership.getRedeemCode(code);
+    }
+    async validateRedeemCode(userId: string, code: string) {
+        return this.membership.validateRedeemCode(userId, code);
+    }
+    async redeemCode(userId: string, code: string) {
+        return this.membership.redeemCode(userId, code);
     }
 
     // User Status

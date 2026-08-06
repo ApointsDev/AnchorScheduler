@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { setToken, authEvents, startCafAuth } from "../services/api";
+import { setToken, setRefreshToken, authEvents, startCafAuth } from "../services/api";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/Card";
 import { Button } from "./ui/Button";
 import "../styles/AuthForms.css";
@@ -33,6 +33,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
         if (callbackToken) {
             setToken(callbackToken);
+            const callbackRefresh = params.get("refresh_token");
+            if (callbackRefresh) setRefreshToken(callbackRefresh);
             const callbackEmail = params.get("email");
             if (callbackEmail) {
                 localStorage.setItem("user_email", callbackEmail);
@@ -42,6 +44,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 authEvents.dispatchEvent(new Event("login"));
             } catch (_) {}
             params.delete("token");
+            params.delete("refresh_token");
             params.delete("from");
             const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`;
             window.history.replaceState({}, "", nextUrl);

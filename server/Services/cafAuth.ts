@@ -448,6 +448,21 @@ export async function findOrCreateCafUser(
     } as User;
     await dbService.addUser(user);
     userCache.set(user.id, user);
+
+    // MENU-001：新用户赠送 7 天银锚会员（免费体验期）
+    try {
+        await dbService.grantMembership(
+            user.id,
+            "silver",
+            7,
+            "welcome_gift",
+        );
+        logger.info(
+            `Welcome 7-day Silver Anchor granted to new user: ${user.id}`,
+        );
+    } catch (e) {
+        logger.error("Failed to grant welcome membership:", e);
+    }
     return user;
 }
 
@@ -480,7 +495,13 @@ export async function handleCafCodeExchange(
     code: string,
     redirectUri: string,
     signJwt: (payload: object) => string,
-): Promise<{ jwtToken: string; email: string; name: string }> {
+    signRefreshJwt?: (payload: object) => string,
+): Promise<{
+    jwtToken: string;
+    refreshToken?: string;
+    email: string;
+    name: string;
+}> {
     if (!cafConfig.baseUrl || !cafConfig.clientId || !cafConfig.clientSecret) {
         throw new Error("CAF auth is not configured on server.");
     }
@@ -558,10 +579,13 @@ export async function handleCafCodeExchange(
     }
 
     const jwtToken = signJwt({ sub: user.id, email: user.email });
+    const refreshToken = signRefreshJwt
+        ? signRefreshJwt({ sub: user.id, email: user.email })
+        : undefined;
     user.JWTtoken = jwtToken;
 
     await dbService.updateUser(user);
     lookup.userCache.set(user.id, user);
 
-    return { jwtToken, email: user.email, name: user.name };
+    return { jwtToken, refreshToken, email: user.email, name: user.name };
 }

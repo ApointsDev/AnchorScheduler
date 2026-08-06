@@ -19,8 +19,8 @@ export class TaskStore {
       userId: string,
       type: string,
       message: string,
-      payload?: any
-    ) => Promise<any>,
+      payload?: unknown
+    ) => Promise<unknown>,
     private onTaskMutation?: (userId: string) => Promise<void>
   ) {}
 
@@ -399,7 +399,7 @@ export class TaskStore {
     }
   ): Promise<{ tasks: Task[]; total: number }> {
     const where: string[] = ["userId = ?"];
-    const params: any[] = [userId];
+    const params: unknown[] = [userId];
     if (!opts?.includeArchived) {
       where.push("archivedAt IS NULL");
     }
@@ -431,7 +431,7 @@ export class TaskStore {
     const order = opts?.order === "desc" ? "DESC" : "ASC";
     const limit = Math.max(1, Math.min(500, opts?.limit || 50));
     const offset = Math.max(0, opts?.offset || 0);
-    const countRow: any = await this.db.get(
+    const countRow = await this.db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM tasks ${whereSql}`,
       params
     );
@@ -452,7 +452,7 @@ export class TaskStore {
     }
   ): Promise<{ occurrences: Task[]; total: number }> {
     const where: string[] = ["userId = ?", "parentTaskId = ?"];
-    const params: any[] = [userId, rootTaskId];
+    const params: unknown[] = [userId, rootTaskId];
     const whereSql = `WHERE ${where.join(" AND ")}`;
     const sortField = ["startTime", "dueDate", "name", "endTime"].includes(
       opts?.sortBy || ""
@@ -462,7 +462,7 @@ export class TaskStore {
     const order = opts?.order === "desc" ? "DESC" : "ASC";
     const limit = Math.max(1, Math.min(500, opts?.limit || 50));
     const offset = Math.max(0, opts?.offset || 0);
-    const countRow: any = await this.db.get(
+    const countRow = await this.db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM tasks ${whereSql}`,
       params
     );
@@ -495,7 +495,7 @@ export class TaskStore {
       id,
     ]);
     const userId = row ? row.userId : null;
-    const result: any = await this.db.run("DELETE FROM tasks WHERE id = ?", [
+    const result = await this.db.run("DELETE FROM tasks WHERE id = ?", [
       id,
     ]);
     const success = (result?.changes || 0) > 0;
@@ -543,9 +543,9 @@ export class TaskStore {
       "SELECT id FROM tasks WHERE userId = ? AND id LIKE ?",
       [userId, pattern]
     );
-    const ids = rows.map((r: any) => r.id);
+    const ids = rows.map((r) => r.id);
     if (ids.length === 0) return 0;
-    const result: any = await this.db.run(
+    const result = await this.db.run(
       "DELETE FROM tasks WHERE userId = ? AND id LIKE ?",
       [userId, pattern]
     );

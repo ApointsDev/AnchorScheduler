@@ -1,0 +1,324 @@
+/* 会员与兑换码页面（MENU-001） */
+
+.membership-page {
+    padding: 8px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+.membership-page.loading-state {
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+}
+
+/* ── 当前会员状态 ─────────────────────────── */
+.membership-current-card {
+    border-color: var(--color-brand-primary);
+}
+
+.membership-current-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-brand-primary);
+}
+
+.membership-current-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.membership-tier-badge {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.membership-tier-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-xl);
+    background: linear-gradient(
+        135deg,
+        var(--color-brand-primary),
+        var(--color-brand-primary-light, var(--color-brand-primary))
+    );
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.membership-tier-name {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+}
+
+.membership-tier-tagline {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-tertiary);
+    margin-top: 2px;
+}
+
+.membership-current-meta {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.membership-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.membership-meta-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+}
+
+.membership-meta-value {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.membership-feature-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.membership-feature-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    background: var(--color-primary-50);
+    color: var(--color-brand-primary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+}
+
+.membership-current-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* ── 兑换码 ───────────────────────────────── */
+.membership-redeem-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.membership-redeem-row .ui-input-wrapper {
+    flex: 1;
+    min-width: 220px;
+}
+
+.membership-redeem-feedback {
+    margin-top: 12px;
+    font-size: var(--font-size-sm);
+}
+
+.membership-valid-hint,
+.membership-error-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.membership-valid-hint {
+    color: var(--color-success);
+}
+
+.membership-error-hint {
+    color: var(--color-danger);
+}
+
+.membership-redeem-success {
+    margin-top: 16px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 14px 16px;
+    border-radius: var(--radius-xl);
+    background: var(--color-success-50, var(--color-primary-50));
+    border: 1px solid var(--color-success-200, var(--color-brand-primary));
+    color: var(--color-text-primary);
+}
+
+.membership-redeem-success-title {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-success);
+    margin-bottom: 4px;
+}
+
+.membership-redeem-success-detail {
+    font-size: var(--font-size-sm);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    line-height: 1.6;
+}
+
+/* ── 套餐 ─────────────────────────────────── */
+.membership-plans-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+.membership-plan-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 20px 18px;
+    border-radius: var(--radius-2xl);
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-card);
+    transition:
+        box-shadow var(--duration-normal),
+        border-color var(--duration-normal);
+}
+
+.membership-plan-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-brand-primary);
+}
+
+.membership-plan-card.membership-plan-current {
+    border-color: var(--color-brand-primary);
+    box-shadow: 0 0 0 1px var(--color-brand-primary);
+}
+
+.membership-plan-name {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+}
+
+.membership-plan-tagline {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+    min-height: 30px;
+}
+
+.membership-plan-price {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.membership-plan-price-value {
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-brand-primary);
+}
+
+.membership-plan-price-period {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-tertiary);
+}
+
+.membership-plan-benefits {
+    list-style: none;
+    padding: 0;
+    margin: 4px 0 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+}
+
+.membership-plan-benefits li {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.membership-plan-benefits svg {
+    color: var(--color-success);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.membership-plan-buy {
+    width: 100%;
+}
+
+/* ── 订单 ─────────────────────────────────── */
+.membership-orders-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.membership-orders-table th,
+.membership-orders-table td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.membership-orders-table th {
+    color: var(--color-text-tertiary);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-xs);
+}
+
+.membership-orders-table td {
+    color: var(--color-text-primary);
+}
+
+.membership-order-status {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+}
+
+.membership-order-completed {
+    background: var(--color-success-50, var(--color-primary-50));
+    color: var(--color-success);
+}
+
+.membership-order-pending {
+    background: var(--color-warning-50, var(--color-primary-50));
+    color: var(--color-warning);
+}
+
+.membership-order-failed,
+.membership-order-refunded {
+    background: var(--color-danger-50, var(--color-primary-50));
+    color: var(--color-danger);
+}
+
+.membership-empty {
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-sm);
+}
+
+/* ── 移动端适配 ───────────────────────────── */
+@media (max-width: 640px) {
+    .membership-plans-grid {
+        grid-template-columns: 1fr;
+    }
+    .membership-current-actions {
+        justify-content: flex-start;
+    }
+}

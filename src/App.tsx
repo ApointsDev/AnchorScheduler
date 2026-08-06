@@ -10,6 +10,7 @@ import {
 import {
     isAuthenticated,
     removeToken,
+    removeRefreshToken,
     authEvents,
     getOnboardingStatus,
     setOnboardingCompleted,
@@ -84,6 +85,7 @@ function App() {
 
     const handleLogout = () => {
         removeToken();
+        removeRefreshToken();
         setIsAuth(false);
         setIsAdmin(false);
     };
@@ -278,6 +280,20 @@ function App() {
                                     <AdminPanel />
                                 ) : (
                                     <Navigate to="/dashboard" />
+                                )
+                            }
+                        />
+
+                        <Route
+                            path="/membership"
+                            element={
+                                isAuth ? (
+                                    <Dashboard
+                                        onLogout={handleLogout}
+                                        view="membership"
+                                    />
+                                ) : (
+                                    <Navigate to="/login" />
                                 )
                             }
                         />
