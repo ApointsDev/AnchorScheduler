@@ -22,6 +22,7 @@ import {
     ensureCafClientCredentials,
 } from "./Services/cafAuth";
 import { processEmailWithLLM } from "./Services/emailProcessor";
+import { daService } from "./Services/daService";
 import type { CafConfig } from "./Services/cafAuth";
 import type { User } from "./types/models";
 import {
@@ -633,6 +634,22 @@ export async function startIntervals(
             }
         }
         logger.debug("Checked all users for Ebridge status");
+
+        // DA 校园大事件（多校）：遍历启用学校，启动/复用各校 DA 邮箱轮询（幂等）
+        try {
+            const schools = await dbService.listSchools();
+            for (const school of schools) {
+                try {
+                    await daService.syncDaMailbox(school);
+                } catch (e: any) {
+                    logger.warn(
+                        `DA 邮箱轮询失败 (${school.slug}): ${e?.message || e}`,
+                    );
+                }
+            }
+        } catch (e: any) {
+            logger.warn(`DA 学校列表加载失败: ${e?.message || e}`);
+        }
     }, 20000);
 
     // 拒绝缓冲池过期清理（每小时）

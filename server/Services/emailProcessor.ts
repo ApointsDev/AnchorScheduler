@@ -39,6 +39,20 @@ export interface EmailProcessingResult {
     /** 工具/时间校验 3 轮后仍失败 */
     validationFailed?: boolean;
     lastValidationError?: string;
+    /** 通过校验的工具调用参数（供 onProcessed 钩子做二次转发/匿名化） */
+    extracted?: Array<{ toolName: string; args: Record<string, unknown> }>;
+}
+
+export interface ProcessEmailOpts {
+    /**
+     * 邮件处理完成后的钩子（默认不调用，向后兼容）。
+     * 供 DA 学生贡献等外部订阅：可对结果做匿名化二次处理。
+     */
+    onProcessed?: (ctx: {
+        user: User;
+        email: EmailForProcessing;
+        result: EmailProcessingResult;
+    }) => Promise<void> | void;
 }
 
 function buildEmailPayload(email: EmailForProcessing, source: string) {
@@ -197,10 +211,27 @@ export async function enqueueValidatedToolCalls(
  * 2. 工具/时间校验（失败重试由 LLMApi 完成，最多 3 轮）
  * 3. 按工具名分别入日程/待办队列
  */
+async function notifyProcessed(
+    opts: ProcessEmailOpts | undefined,
+    user: User,
+    email: EmailForProcessing,
+    result: EmailProcessingResult,
+): Promise<void> {
+    if (opts?.onProcessed) {
+        try {
+            await opts.onProcessed({ user, email, result });
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.warn(`processEmailWithLLM onProcessed 钩子失败: ${message}`);
+        }
+    }
+}
+
 export async function processEmailWithLLM(
     user: User,
     email: EmailForProcessing,
     source: "imap" | "exchange" | string,
+    opts?: ProcessEmailOpts,
 ): Promise<EmailProcessingResult> {
     const result: EmailProcessingResult = {
         queuedSchedules: [],
@@ -268,6 +299,7 @@ export async function processEmailWithLLM(
                     );
                 }
             }
+            await notifyProcessed(opts, user, email, result);
             return result;
         }
 
@@ -307,6 +339,7 @@ export async function processEmailWithLLM(
                     );
                 }
             }
+            await notifyProcessed(opts, user, email, result);
             return result;
         }
 
@@ -322,6 +355,26 @@ export async function processEmailWithLLM(
         result.queueIds = enqueued.queueIds;
         result.queuedTodos = enqueued.queuedTodos;
         result.todoQueueIds = enqueued.todoQueueIds;
+
+        // 记录通过校验的工具调用参数，供 onProcessed 钩子（如 DA 学生贡献）复用
+        result.extracted = (llmResponse.tool_calls || [])
+            .filter(
+                (tc: any) =>
+                    tc?.function?.name === MCPToolNames.AddSchedule ||
+                    tc?.function?.name === MCPToolNames.AddTodo,
+            )
+            .map((tc: any) => {
+                let args: Record<string, unknown> = {};
+                try {
+                    args =
+                        typeof tc.function.arguments === "string"
+                            ? JSON.parse(tc.function.arguments)
+                            : tc.function.arguments || {};
+                } catch {
+                    args = {};
+                }
+                return { toolName: tc.function.name, args };
+            });
 
         logger.success(
             `邮件处理完成: ${email.subject}, 入队日程 ${result.queuedSchedules.length} / 待办 ${result.queuedTodos.length}`,
@@ -360,5 +413,6 @@ export async function processEmailWithLLM(
         throw err;
     }
 
+    await notifyProcessed(opts, user, email, result);
     return result;
 }

@@ -1,0 +1,505 @@
+/* DA 校园大事件（多校）公开页 + 管理页样式
+ * 仅使用设计令牌：--color-* / --space-* / --radius-* / --font-size-* / --shadow-* / --duration-*
+ */
+
+.da-page {
+    min-height: 100vh;
+    background: var(--color-bg, #f7fafc);
+    color: var(--color-text-primary);
+    --da-accent: var(--color-primary, #2563eb);
+}
+
+.da-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+}
+
+.da-error,
+.da-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-8);
+    color: var(--color-text-light);
+    text-align: center;
+}
+
+/* ── 公共头部 ─────────────────────────────────────────── */
+.da-header {
+    background: var(--color-surface, #fff);
+    border-bottom: 1px solid var(--color-border);
+    padding: var(--space-6) var(--space-6);
+}
+
+.da-back {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--color-text-tertiary);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    transition: color var(--duration-fast) ease;
+}
+
+.da-back:hover {
+    color: var(--da-accent);
+}
+
+.da-header-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+
+.da-logo {
+    width: 24px;
+    height: 24px;
+}
+
+.da-brand {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--color-text-dark);
+}
+
+.da-header-title h1 {
+    margin: var(--space-3) 0 var(--space-1);
+    font-size: 1.6rem;
+    color: var(--color-text-dark);
+}
+
+.da-header-intro {
+    margin: 0;
+    color: var(--color-text-light);
+    max-width: 720px;
+}
+
+.da-header-contact {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-top: var(--space-2);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-tertiary);
+}
+
+/* ── 主体 / 工具栏 ────────────────────────────────────── */
+.da-body {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: var(--space-5) var(--space-4) var(--space-10);
+}
+
+.da-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+/* ── 落地页 ───────────────────────────────────────────── */
+.da-landing {
+    padding: var(--space-8) var(--space-4);
+}
+
+.da-landing-header {
+    max-width: 1100px;
+    margin: 0 auto var(--space-8);
+    text-align: center;
+}
+
+.da-landing-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
+}
+
+.da-landing-title-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.da-landing-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 1.8rem;
+    color: var(--color-text-dark);
+    margin: 0;
+}
+
+.da-landing-intro {
+    color: var(--color-text-light);
+    margin: 0;
+}
+
+.da-school-grid {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-4);
+}
+
+.da-school-card {
+    text-decoration: none;
+    color: inherit;
+}
+
+.da-school-card-inner {
+    height: 100%;
+    border-left: 4px solid var(--da-accent, var(--color-primary));
+    transition:
+        transform var(--duration-fast) ease,
+        box-shadow var(--duration-fast) ease;
+}
+
+.da-school-card:hover .da-school-card-inner {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.08));
+}
+
+.da-school-name {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--color-text-dark);
+    margin-bottom: var(--space-2);
+}
+
+.da-school-mail {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--color-text-light);
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--space-4);
+}
+
+.da-school-cta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--da-accent, var(--color-primary));
+    font-weight: 500;
+    font-size: var(--font-size-sm);
+}
+
+/* ── 月视图迷你事件 ───────────────────────────────────── */
+.da-mini-event {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    padding: 2px 6px;
+    margin: 1px 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--da-accent, var(--color-primary)) 14%, white);
+    color: var(--color-text-primary);
+    font-size: 11px;
+    cursor: pointer;
+    text-align: left;
+    overflow: hidden;
+}
+
+.da-mini-event:hover {
+    background: color-mix(in srgb, var(--da-accent, var(--color-primary)) 24%, white);
+}
+
+.da-mini-time {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--color-text-tertiary);
+}
+
+.da-mini-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── 周视图事件 ───────────────────────────────────────── */
+.da-week-event {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--da-accent, var(--color-primary)) 16%, white);
+    color: var(--color-text-primary);
+    font-size: 11px;
+    padding: 2px 4px;
+    cursor: pointer;
+    text-align: left;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.da-week-event:hover {
+    background: color-mix(in srgb, var(--da-accent, var(--color-primary)) 26%, white);
+}
+
+.da-week-event-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.da-week-event-time {
+    font-size: 10px;
+    color: var(--color-text-tertiary);
+}
+
+/* ── 列表视图 ─────────────────────────────────────────── */
+.da-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.da-list-day {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.da-list-date {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-light);
+    padding: var(--space-1) var(--space-2);
+    border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.da-list-item {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-2);
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--duration-fast) ease;
+}
+
+.da-list-item:hover {
+    background: var(--color-neutral-100);
+}
+
+.da-list-time {
+    flex-shrink: 0;
+    width: 52px;
+    font-size: var(--font-size-sm);
+    color: var(--da-accent, var(--color-primary));
+    font-weight: 600;
+}
+
+.da-list-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.da-list-name {
+    font-weight: 500;
+    color: var(--color-text-dark);
+}
+
+.da-list-loc {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--color-text-light);
+    font-size: var(--font-size-sm);
+    margin-top: 2px;
+}
+
+/* ── 事件详情 ─────────────────────────────────────────── */
+.da-event-detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.da-event-detail-name {
+    margin: 0 0 var(--space-2);
+    color: var(--color-text-dark);
+}
+
+.da-event-detail-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.da-event-detail-desc {
+    margin: var(--space-2) 0;
+    color: var(--color-text-secondary);
+    white-space: pre-wrap;
+    font-size: var(--font-size-sm);
+}
+
+.da-event-detail-close {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--space-3);
+}
+
+/* ── 管理页通用 ───────────────────────────────────────── */
+.da-admin {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--space-5) var(--space-4) var(--space-10);
+}
+
+.da-admin-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+}
+
+.da-admin-header h2 {
+    margin: 0;
+    color: var(--color-text-dark);
+}
+
+.da-tabs {
+    display: flex;
+    gap: var(--space-1);
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: var(--space-5);
+    overflow-x: auto;
+}
+
+.da-tab {
+    padding: var(--space-2) var(--space-4);
+    border: none;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color var(--duration-fast) ease;
+}
+
+.da-tab:hover {
+    color: var(--color-text-primary);
+}
+
+.da-tab-active {
+    color: var(--da-accent, var(--color-primary));
+    border-bottom-color: var(--da-accent, var(--color-primary));
+}
+
+.da-admin-card {
+    margin-bottom: var(--space-4);
+}
+
+.da-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.da-form-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.da-form-row label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.da-form-actions {
+    display: flex;
+    gap: var(--space-2);
+    justify-content: flex-end;
+    margin-top: var(--space-2);
+}
+
+.da-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.da-row:last-child {
+    border-bottom: none;
+}
+
+.da-row-title {
+    font-weight: 500;
+    color: var(--color-text-dark);
+}
+
+.da-row-sub {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+}
+
+.da-admin-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.da-admin-list-item:last-child {
+    border-bottom: none;
+}
+
+.da-textarea {
+    width: 100%;
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface, #fff);
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: var(--font-size-sm);
+    resize: vertical;
+}
+
+.da-textarea:focus {
+    outline: none;
+    border-color: var(--da-accent, var(--color-primary));
+}
+
+.da-tab-badge {
+    display: inline-block;
+    min-width: 18px;
+    margin-left: 6px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--da-accent, var(--color-primary));
+    color: #fff;
+    font-size: 11px;
+    line-height: 18px;
+    text-align: center;
+}

@@ -117,6 +117,11 @@ import {
     type AppPlatform,
     type AppRelease,
 } from "./appUpdate";
+import { SchoolStore, type School } from "./schools";
+import {
+    DaStore,
+    type DaStudentOptin,
+} from "./da";
 import type { TodoPageOpts } from "./todos";
 import type {
     CommunityRankMetric,
@@ -135,6 +140,8 @@ export type {
 };
 export type { ReportListOpts, ReportListResult, ReportStatus, ReportType, UserReport };
 export type { AppPlatform, AppRelease };
+export type { School };
+export type { DaStudentOptin };
 
 export class DatabaseService {
     private db: Database | null = null;
@@ -163,6 +170,8 @@ export class DatabaseService {
     membership!: MembershipStore;
     reports!: UserReportStore;
     appUpdate!: AppUpdateStore;
+    schools!: SchoolStore;
+    da!: DaStore;
 
     async initialize() {
         try {
@@ -222,6 +231,8 @@ export class DatabaseService {
             this.membership = new MembershipStore(this.db);
             this.reports = new UserReportStore(this.db);
             this.appUpdate = new AppUpdateStore(this.db);
+            this.schools = new SchoolStore(this.db);
+            this.da = new DaStore(this.db);
 
             logger.success("Database initialized successfully");
         } catch (error) {
@@ -880,6 +891,73 @@ export class DatabaseService {
     }
     async getFollowers(userId: string, limit?: number, offset?: number) {
         return this.follows.getFollowers(userId, limit, offset);
+    }
+
+    // ── 多校 DA 校园大事件（School Events）──
+
+    // Schools
+    async listSchools(opts?: { includeDisabled?: boolean }) {
+        return this.schools.list(opts);
+    }
+    async getSchoolById(id: string) {
+        return this.schools.getById(id);
+    }
+    async getSchoolBySlug(slug: string) {
+        return this.schools.getBySlug(slug);
+    }
+    async createSchool(input: import("./schools").SchoolCreateInput) {
+        return this.schools.create(input);
+    }
+    async updateSchool(
+        id: string,
+        patch: Parameters<SchoolStore["update"]>[1],
+    ) {
+        return this.schools.update(id, patch);
+    }
+    async setSchoolEnabled(id: string, enabled: boolean) {
+        return this.schools.setEnabled(id, enabled);
+    }
+    async deleteSchool(id: string) {
+        return this.schools.delete(id);
+    }
+    // School admins
+    async listSchoolAdmins(schoolId: string) {
+        return this.schools.listAdmins(schoolId);
+    }
+    async isSchoolAdmin(schoolId: string, email: string) {
+        return this.schools.isAdmin(schoolId, email);
+    }
+    async addSchoolAdmin(schoolId: string, email: string) {
+        return this.schools.addAdmin(schoolId, email);
+    }
+    async removeSchoolAdmin(schoolId: string, email: string) {
+        return this.schools.removeAdmin(schoolId, email);
+    }
+    // DA settings
+    async getDaSetting(schoolId: string, key: string) {
+        return this.da.getSetting(schoolId, key);
+    }
+    async setDaSetting(schoolId: string, key: string, value: string) {
+        return this.da.setSetting(schoolId, key, value);
+    }
+    async getAllDaSettings(schoolId: string) {
+        return this.da.getAllSettings(schoolId);
+    }
+    // DA student optins
+    async getDaOptin(schoolId: string, userId: string) {
+        return this.da.getOptin(schoolId, userId);
+    }
+    async setDaOptin(schoolId: string, userId: string, optedIn: boolean) {
+        return this.da.setOptin(schoolId, userId, optedIn);
+    }
+    async listDaOptins(
+        schoolId: string,
+        opts?: { limit?: number; offset?: number },
+    ) {
+        return this.da.listOptins(schoolId, opts);
+    }
+    async listSchoolsByOptinUser(userId: string) {
+        return this.da.listSchoolsByOptinUser(userId);
     }
 
     async close() {

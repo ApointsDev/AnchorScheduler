@@ -11,6 +11,8 @@ import type { ScheduleType } from "../Services/types";
  */
 export interface Task {
   id: string;
+  /** 所属用户 ID（tasks 表主键列，用于分享/鉴权） */
+  userId?: string;
   name: string;
   description: string;
   dueDate: string;

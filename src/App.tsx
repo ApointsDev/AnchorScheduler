@@ -26,6 +26,11 @@ import "./App.css";
 import ScheduleQueueNotifier from "./components/ScheduleQueueNotifier";
 import Onboarding from "./components/Onboarding";
 import AdminPanel from "./components/Admin/AdminPanel";
+import DaSchoolsPage from "./components/DA/DaSchoolsPage";
+import DaEventsPage from "./components/DA/DaEventsPage";
+import DaAdminIndex from "./components/DA/DaAdminIndex";
+import DaSchoolsAdmin from "./components/DA/DaSchoolsAdmin";
+import DaAdminPanel from "./components/DA/DaAdminPanel";
 
 function App() {
     const { t } = useTranslation();
@@ -285,6 +290,37 @@ function App() {
                         />
 
                         <Route
+                            path="/admin/schools"
+                            element={
+                                isAuth && isAdmin ? (
+                                    <DaSchoolsAdmin />
+                                ) : (
+                                    <Navigate to="/dashboard" />
+                                )
+                            }
+                        />
+                        <Route
+                            path="/admin/da/:slug"
+                            element={
+                                isAuth ? (
+                                    <DaAdminPanel />
+                                ) : (
+                                    <Navigate to="/login" />
+                                )
+                            }
+                        />
+                        <Route
+                            path="/admin/da"
+                            element={
+                                isAuth ? (
+                                    <DaAdminIndex />
+                                ) : (
+                                    <Navigate to="/login" />
+                                )
+                            }
+                        />
+
+                        <Route
                             path="/settings/membership"
                             element={
                                 isAuth ? (
@@ -299,6 +335,10 @@ function App() {
                         />
 
                         <Route path="/share/:token" element={<ShareView />} />
+
+                        {/* DA 校园大事件公开页（无需登录） */}
+                        <Route path="/events" element={<DaSchoolsPage />} />
+                        <Route path="/:slug/events" element={<DaEventsPage />} />
 
                         <Route
                             path="*"

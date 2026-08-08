@@ -492,6 +492,73 @@ export async function runMigrations(db: Database): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_user_follows_followed ON user_follows(followedId);`
   );
 
+  // ── 多校 DA 校园大事件（School Events）──
+  await db.exec(`
+        CREATE TABLE IF NOT EXISTS schools (
+            id          TEXT PRIMARY KEY,
+            slug        TEXT UNIQUE NOT NULL,
+            name        TEXT NOT NULL,
+            eventsEmail TEXT,
+            themeColor  TEXT,
+            enabled     INTEGER NOT NULL DEFAULT 1,
+            createdAt   DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updatedAt   DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    `);
+  await db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_schools_slug ON schools(slug);`
+  );
+
+  await db.exec(`
+        CREATE TABLE IF NOT EXISTS school_admins (
+            schoolId  TEXT NOT NULL,
+            email     TEXT NOT NULL,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (schoolId, email),
+            FOREIGN KEY (schoolId) REFERENCES schools(id) ON DELETE CASCADE
+        );
+    `);
+  await db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_school_admins_email ON school_admins(email);`
+  );
+
+  await db.exec(`
+        CREATE TABLE IF NOT EXISTS da_settings (
+            schoolId  TEXT NOT NULL,
+            key       TEXT NOT NULL,
+            value     TEXT NOT NULL,
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (schoolId, key),
+            FOREIGN KEY (schoolId) REFERENCES schools(id) ON DELETE CASCADE
+        );
+    `);
+
+  await db.exec(`
+        CREATE TABLE IF NOT EXISTS da_student_optins (
+            schoolId  TEXT NOT NULL,
+            userId    TEXT NOT NULL,
+            optedIn   INTEGER NOT NULL DEFAULT 0,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (schoolId, userId),
+            FOREIGN KEY (schoolId) REFERENCES schools(id) ON DELETE CASCADE,
+            FOREIGN KEY (userId)   REFERENCES users(id)   ON DELETE CASCADE
+        );
+    `);
+  await db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_da_student_optins_user ON da_student_optins(userId);`
+  );
+
+  // 预置默认学校（幂等）
+  try {
+    await db.run(
+      `INSERT OR IGNORE INTO schools (id, slug, name, eventsEmail, enabled) VALUES (?, ?, ?, ?, 1)`,
+      ["school-xjtlu", "xjtlu", "西交利物浦大学", "da.events@apoints.cn"],
+    );
+  } catch (e) {
+    logger.info("default school seed skipped:", (e as Error).message);
+  }
+
   // 学习通条目去重映射
   await db.exec(`
         CREATE TABLE IF NOT EXISTS chaoxing_item_map (

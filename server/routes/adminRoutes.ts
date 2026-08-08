@@ -9,6 +9,13 @@ import express from "express";
 import { dbService } from "../Services/dbService.js";
 import { logger } from "../Utils/logger.js";
 import type { User } from "../index.js";
+import { REPORT_TYPES, REPORT_STATUSES } from "../Services/db/reports.js";
+import type {
+    ReportType,
+    ReportStatus,
+} from "../Services/db/reports.js";
+import { APP_PLATFORMS } from "../Services/db/appUpdate.js";
+import type { AppPlatform } from "../Services/db/appUpdate.js";
 import {
     type AdminUserRow,
     ADMIN_FIELD_META,
@@ -29,6 +36,29 @@ const ADMIN_EMAILS = loadAdminEmails();
 logger.info(
     `Admin emails loaded: ${ADMIN_EMAILS.length > 0 ? ADMIN_EMAILS.join(", ") : "(none)"}`,
 );
+
+// ── 类型化筛选辅助（避免把任意字符串传给字面量联合类型）────────
+
+function toReportType(value: unknown): ReportType | undefined {
+    const s = value == null ? "" : String(value);
+    return (REPORT_TYPES as readonly string[]).includes(s)
+        ? (s as ReportType)
+        : undefined;
+}
+
+function toReportStatus(value: unknown): ReportStatus | undefined {
+    const s = value == null ? "" : String(value);
+    return (REPORT_STATUSES as readonly string[]).includes(s)
+        ? (s as ReportStatus)
+        : undefined;
+}
+
+function toAppPlatform(value: unknown): AppPlatform {
+    const s = value == null ? "" : String(value);
+    return (APP_PLATFORMS as readonly string[]).includes(s)
+        ? (s as AppPlatform)
+        : "all";
+}
 
 // ── 管理员中间件 ────────────────────────────────────────────────
 
@@ -473,8 +503,8 @@ export function createAdminRouter() {
             );
 
             const result = await dbService.reports.list({
-                type: type ? String(type) : undefined,
-                status: status ? String(status) : undefined,
+                type: toReportType(type),
+                status: toReportStatus(status),
                 search: search ? String(search) : undefined,
                 limit: limitNum,
                 offset: (pageNum - 1) * limitNum,
@@ -569,7 +599,7 @@ export function createAdminRouter() {
             }
             const release = await dbService.appUpdate.upsert({
                 id: b.id || undefined,
-                platform: String(b.platform),
+                platform: toAppPlatform(b.platform),
                 version: String(b.version),
                 versionCode: b.versionCode != null ? Number(b.versionCode) : 0,
                 downloadUrl: String(b.downloadUrl),

@@ -270,35 +270,34 @@
 .account-info .info-item .info-value.info-id {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-3);
     max-width: 100%;
 }
 
 .account-info .info-item .info-value .info-id-text {
-    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-    font-size: 0.85em;
+    /* 继承周围文本的字体/字号（设计令牌无 --font-mono，勿覆盖 font-family） */
     word-break: break-all;
 }
 
 .copy-id-btn {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-md, 6px);
+    border-radius: var(--radius-md);
     background: transparent;
     color: var(--color-text-medium);
-    font-size: 0.8em;
+    font-size: var(--font-size-xs);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-    transition: color 0.15s ease, border-color 0.15s ease;
+    transition: color var(--duration-fast) ease, border-color var(--duration-fast) ease;
 }
 
 .copy-id-btn:hover:not(:disabled) {
-    color: var(--color-primary, #6366f1);
-    border-color: var(--color-primary, #6366f1);
+    color: var(--color-brand-primary);
+    border-color: var(--color-brand-primary);
 }
 
 .copy-id-btn:disabled {

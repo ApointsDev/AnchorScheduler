@@ -13,6 +13,8 @@
 | [community.md](community.md) | 社区地区 / 四项 status 排名 | 9 |
 | [rejection-buffer.md](rejection-buffer.md) | 事件拒绝缓冲池（24h TTL） | 3 |
 | [reports.md](reports.md) | 用户反馈 / 举报 | 5 |
+| [membership.md](membership.md) | 会员 / 兑换码 / 购买 | 7 |
+| [share.md](share.md) | 日程分享链接 | 4 |
 | [app-update.md](app-update.md) | 应用版本更新检查 / 配置 | 5 |
 | [tasks.md](tasks.md) | 日程（Task）CRUD / 日程队列 | 13 |
 | [todos.md](todos.md) | 待办（Todo）CRUD / 标签 / 按标签反查 | 12 |
@@ -20,7 +22,7 @@
 | [chat.md](chat.md) | LLM 对话 / 聊天上下文 | 8 |
 | [calendar.md](calendar.md) | CalDAV / 课表同步 | 12 |
 | [admin.md](admin.md) | 管理后台 | 9 |
-| [integrations.md](integrations.md) | 算法 / 豆包 / 语音识别 / MCP / Ebridge / 分享 | 21 |
+| [integrations.md](integrations.md) | 算法 / 豆包 / 语音识别 / MCP / Ebridge | 17 |
 | [reference.md](reference.md) | 数据结构 / WebSocket / 状态码 | — |
 
 ## 认证说明

@@ -191,3 +191,43 @@ export type {
     AppReleaseInfo,
     AppUpdateCheckResult,
 } from "./appUpdate";
+
+// ── DA 校园大事件（多校）───────────────────────────────
+export {
+    getDaSchools,
+    getDaEvents,
+    getDaEvent,
+    getDaPage,
+    getDaAdminMySchools,
+    getDaAdminSchools,
+    createDaSchool,
+    updateDaSchool,
+    deleteDaSchool,
+    addDaSchoolAdmin,
+    removeDaSchoolAdmin,
+    getDaAdminEvents,
+    createDaEvent,
+    updateDaEvent,
+    deleteDaEvent,
+    getDaQueue,
+    approveDaQueueItem,
+    rejectDaQueueItem,
+    importDaText,
+    getDaSettings,
+    updateDaSettings,
+    refreshDaMail,
+    getDaStudents,
+    setDaAdminStudentOptin,
+    getDaOptin,
+    setDaOptin,
+} from "./da";
+export type {
+    School,
+    DaEvent,
+    DaPageConfig,
+    DaAdminSchool,
+    DaQueueItem,
+    DaQueueResponse,
+    DaSettings,
+    DaStudentRow,
+} from "./da";

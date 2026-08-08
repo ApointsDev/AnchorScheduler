@@ -45,16 +45,21 @@ Response: {
 
 称号标签对照见 [community.md](community.md) / [user-status.md](user-status.md)。
 
-### `GET /api/me`
+### `GET /api/me` — 当前用户资料（含用户 ID）
 ```
 Response: {
-  id, email, name,
+  id, email, name,             // id = 用户 ID（UUID 随机字符串，全局唯一主键）
   avatar: string | null,       // 头像 URL 或 /uploads/avatars/...
   signature: string | null,    // 个人签名
   autoSchedulePromotions, stripReplyPrefix
 }
 ```
 获取当前用户资料与部分设置。
+
+**用户 ID（`id`）说明**：`id` 为系统生成的 UUID 随机字符串，**不是邮箱也不是昵称**，
+用于全局唯一标识当前用户。管理员发放会员权益（`POST /api/admin/membership/grant`）时填写的
+`userId` 即为此值；兑换码兑换记录（`redeem_code_redemptions`）也按该值关联。
+普通用户可在设置页「账号信息 → 用户 ID」查看并复制。
 
 ### `POST /api/me/avatar` — 换头像
 支持两种方式：

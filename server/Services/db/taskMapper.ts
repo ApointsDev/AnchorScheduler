@@ -38,6 +38,7 @@ export function mapRowToTask(row: any): Task {
   const reminderMinutesBefore = mapAxisScore(row.reminderMinutesBefore);
   return {
     id: row.id,
+    userId: row.userId,
     name: row.name,
     description: row.description,
     dueDate: row.dueDate,

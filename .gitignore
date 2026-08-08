@@ -45,3 +45,4 @@ docker-run.ps1
 
 # 重构备份（拆分前的原文件）
 .refactor-backup
+.codex-backups

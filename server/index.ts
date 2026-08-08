@@ -36,6 +36,7 @@ import { initializeMembershipRoutes } from "./routes/membershipRoutes.js";
 import { initializeReportRoutes } from "./routes/reportRoutes.js";
 import { initializeAppUpdateRoutes } from "./routes/appUpdateRoutes.js";
 import { initializeExchangeForwardRoutes } from "./routes/exchangeForwardRoutes.js";
+import { initializeDaRoutes } from "./routes/daRoutes.js";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
@@ -484,6 +485,9 @@ app.post(
 
 // Admin 路由
 app.use("/api/admin", authenticateToken, createAdminRouter());
+
+// DA 校园大事件（多校）路由
+app.use("/api/da", initializeDaRoutes(authenticateToken));
 
 // MCP 路由
 initializeMcpRoutes(app, authenticateToken);

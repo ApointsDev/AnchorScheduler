@@ -132,10 +132,11 @@ async function scanInboxForCode(
 }
 
 export function initializeExchangeForwardRoutes(
-  router: express.Router,
   authenticateToken: AuthMiddleware,
   cafConfig: any,
-) {
+): express.Router {
+  const router = express.Router();
+
   // ── 发送测试邮件并开启待验证状态 ────────────────────────
   router.post(
     "/exchange-forward/start",
@@ -258,4 +259,6 @@ export function initializeExchangeForwardRoutes(
       res.json({ cancelled: true });
     },
   );
+
+  return router;
 }

@@ -49,10 +49,10 @@ export function registerShareRoutes(
                     userId: user.id,
                     token,
                     name: name || "日程分享",
-                    dateStart: dateStart || null,
-                    dateEnd: dateEnd || null,
-                    taskIds: taskIds ? JSON.stringify(taskIds) : null,
-                    expiresAt,
+                    dateStart: dateStart || undefined,
+                    dateEnd: dateEnd || undefined,
+                    taskIds: taskIds ? JSON.stringify(taskIds) : undefined,
+                    expiresAt: expiresAt || undefined,
                 });
 
                 const shareUrl = `${frontendUrl}/share/${token}`;

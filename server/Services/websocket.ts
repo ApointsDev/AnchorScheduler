@@ -1,4 +1,4 @@
-import { WebSocketServer } from "ws";
+import { WebSocketServer, RawData } from "ws";
 import type { WebSocket } from "ws";
 import { IncomingMessage } from "http";
 import { Task, User } from "../index";
@@ -27,7 +27,7 @@ export function initWebSocket(httpServer: any, provider: () => Iterable<User>) {
         // heartbeat init (use application-level ping/pong so browsers stay compatible)
         socket.isAlive = true;
         socket.on &&
-            socket.on("message", (data: WebSocket.RawData) => {
+            socket.on("message", (data: RawData) => {
                 try {
                     const raw =
                         typeof data === "string" ? data : data.toString();

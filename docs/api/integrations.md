@@ -153,12 +153,14 @@ Body: { url }
 
 ## 十三、分享
 
+> 完整接口见 [share.md](share.md)。
+
 ### `POST /api/share/create` 🔒
 ```
-Body: { taskIds: string[], expiresIn?, dateRange? }
-Response: { token, url }
+Body: { name?, dateStart?, dateEnd?, taskIds?, expiresInDays? }
+Response: { token, shareUrl, expiresAt }
 ```
-创建日程分享链接。
+创建日程分享链接（按日期区间 / 指定任务 / 全部日程）。
 
 ### `GET /api/share/list` 🔒
 ```
@@ -167,7 +169,7 @@ Response: { shares: [...] }
 获取当前用户的所有分享链接。
 
 ### `DELETE /api/share/:token` 🔒
-删除指定分享链接。
+删除指定分享链接（仅限本人）。
 
 ### `GET /api/share/view/:token`
-无需认证。通过 token 查看分享的日程。
+无需认证。通过 token 查看分享的日程（脱敏数据）。

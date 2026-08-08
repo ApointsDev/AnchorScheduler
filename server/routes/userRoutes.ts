@@ -142,7 +142,7 @@ export function registerUserRoutes(
         async (req: any, res: any) => {
             try {
                 const user = req.user as User;
-                let nextAvatar: string | null | undefined;
+                let nextAvatar: string | null = null;
 
                 if (req.file) {
                     ensureAvatarDir();
@@ -218,13 +218,13 @@ export function registerUserRoutes(
             if (body.signature === null || body.signature === "") {
                 signature = null;
             } else if (typeof body.signature === "string") {
-                signature = body.signature.trim();
-                if (signature.length > SIGNATURE_MAX_LENGTH) {
+                const value = String(body.signature).trim();
+                if (value.length > SIGNATURE_MAX_LENGTH) {
                     return res.status(400).json({
                         error: `signature 最长 ${SIGNATURE_MAX_LENGTH} 字`,
                     });
                 }
-                if (signature === "") signature = null;
+                signature = value === "" ? null : value;
             } else {
                 return res
                     .status(400)
