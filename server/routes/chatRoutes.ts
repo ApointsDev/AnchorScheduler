@@ -39,6 +39,15 @@ export function registerChatRoutes(
         } catch (error: any) {
             logger.error("LLM chat failed:", error);
             if (!res.headersSent) {
+                // 上游返回的 400 类「非法消息」错误：透出真实错误信息，便于客户端区分
+                if (error?.status === 400) {
+                    return res.status(400).json({
+                        error:
+                            error?.error?.message ||
+                            error?.message ||
+                            "Invalid chat request messages",
+                    });
+                }
                 return res
                     .status(500)
                     .json({ error: "Failed to process chat request" });

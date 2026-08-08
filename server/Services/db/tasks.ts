@@ -357,7 +357,7 @@ export class TaskStore {
     const setClauses = fields.map((f) => `${f} = ?`).join(", ");
     const values = fields.map((f) => {
       const key = f as keyof typeof updates;
-      let value = updates[key];
+      const value = updates[key];
       if (f === "completedAt") {
         return value || null;
       }

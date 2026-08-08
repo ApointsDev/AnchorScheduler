@@ -526,7 +526,7 @@ export async function handleCafCodeExchange(
     }
 
     const claims = decodeJwtPayload(access_token) || {};
-    let cafSub = (
+    const cafSub = (
         claims.sub ||
         claims.user_id ||
         claims.uid ||

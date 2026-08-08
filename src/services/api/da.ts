@@ -79,7 +79,10 @@ async function authedFetch(
     if (!token) throw new Error("用户未登录");
     const headers = new Headers(init?.headers || {});
     headers.set("Authorization", `Bearer ${token}`);
-    return customFetch(input, { ...init, headers } as any);
+    return customFetch(input, {
+        ...init,
+        headers,
+    } as RequestInit & { _isRetry?: boolean });
 }
 
 // ── 公开（无 JWT）──────────────────────────────────────────
@@ -436,7 +439,11 @@ export const getDaOptin = async (): Promise<{ schoolId: string; optedIn: boolean
     const res = await authedFetch("/api/da/optin");
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.optins || []).map((o: any) => ({
+    const optins = (data.optins || []) as {
+        schoolId: string;
+        optedIn: number | boolean;
+    }[];
+    return optins.map((o) => ({
         schoolId: o.schoolId,
         optedIn: o.optedIn === 1 || o.optedIn === true,
     }));

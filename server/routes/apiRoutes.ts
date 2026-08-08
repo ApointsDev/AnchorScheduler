@@ -13,6 +13,7 @@ import { registerScheduleQueueRoutes } from "./scheduleQueueRoutes.js";
 import { registerEmailRoutes } from "./emailRoutes.js";
 import { registerUserRoutes } from "./userRoutes.js";
 import { registerShareRoutes } from "./shareRoutes.js";
+import { registerUploadRoutes } from "./uploadRoutes.js";
 import type { AuthMiddleware } from "./apiTypes.js";
 
 // 向后兼容：其他路由文件（如 todoRoutes.ts）从 ./apiRoutes 导入 AuthMiddleware
@@ -42,6 +43,7 @@ export function initializeApiRoutes(
     registerEmailRoutes(router, authenticateToken);
     registerUserRoutes(router, authenticateToken);
     registerShareRoutes(router, authenticateToken, frontendUrl);
+    registerUploadRoutes(router, authenticateToken);
 
     return router;
 }

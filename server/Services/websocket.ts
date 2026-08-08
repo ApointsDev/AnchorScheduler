@@ -1,6 +1,6 @@
 import { WebSocketServer, RawData } from "ws";
 import type { WebSocket } from "ws";
-import { IncomingMessage } from "http";
+import { IncomingMessage, Server as HttpServer } from "http";
 import { Task, User } from "../index";
 import { logger } from "../Utils/logger.js";
 import { toShanghaiISO } from "../Utils/time.js";
@@ -20,43 +20,57 @@ interface AuthedSocket extends WebSocket {
 }
 let heartbeatInterval: NodeJS.Timeout | null = null;
 
-export function initWebSocket(httpServer: any, provider: () => Iterable<User>) {
+export function initWebSocket(
+    httpServer: HttpServer,
+    provider: () => Iterable<User>,
+) {
     userProvider = provider;
     wss = new WebSocketServer({ server: httpServer, path: "/ws" });
     wss.on("connection", (socket: AuthedSocket, req: IncomingMessage) => {
         // heartbeat init (use application-level ping/pong so browsers stay compatible)
         socket.isAlive = true;
-        socket.on &&
+        if (socket.on) {
             socket.on("message", (data: RawData) => {
                 try {
                     const raw =
                         typeof data === "string" ? data : data.toString();
                     const msg = JSON.parse(raw);
                     if (msg && msg.type === "pong") socket.isAlive = true;
-                } catch (_) {}
+                } catch {
+                    /* 忽略解析错误 */
+                }
             });
+        }
 
         // log close/error for easier debugging and remove mapping
-        socket.on &&
+        if (socket.on) {
             socket.on("close", (code?: number, reason?: Buffer) => {
                 try {
                     logger.info(
                         `WebSocket closed for user=${socket.userId || "unknown"} code=${code} reason=${reason ? reason.toString() : ""}`,
                     );
-                } catch (_) {}
+                } catch {
+                    /* 忽略 */
+                }
                 try {
                     if (socket.userId) {
                         const cur = userSockets.get(socket.userId);
                         if (cur === socket) userSockets.delete(socket.userId);
                     }
-                } catch (_) {}
+                } catch {
+                    /* 忽略 */
+                }
             });
-        socket.on &&
-            socket.on("error", (err: any) => {
+        }
+        if (socket.on) {
+            socket.on("error", (err: Error) => {
                 try {
                     logger.error("WebSocket error", err);
-                } catch (_) {}
+                } catch {
+                    /* 忽略 */
+                }
             });
+        }
 
         const url = new URL(req.url || "", `http://${req.headers.host}`);
         const token = url.searchParams.get("token");
@@ -65,15 +79,20 @@ export function initWebSocket(httpServer: any, provider: () => Iterable<User>) {
                 socket.send(
                     JSON.stringify({ type: "error", error: "AUTH_REQUIRED" }),
                 );
-            } catch (_) {}
+            } catch {
+                /* 忽略 */
+            }
             try {
                 socket.close();
-            } catch (_) {}
+            } catch {
+                /* 忽略 */
+            }
             return;
         }
         try {
-            const decoded: any = jwt.verify(token, JWT_SECRET);
-            socket.userId = decoded.sub;
+            const decoded = jwt.verify(token, JWT_SECRET);
+            socket.userId =
+                typeof decoded === "string" ? decoded : decoded.sub;
             try {
                 // If there is already an active socket for this user, replace it
                 const existing = socket.userId
@@ -82,12 +101,16 @@ export function initWebSocket(httpServer: any, provider: () => Iterable<User>) {
                 if (existing && existing !== socket) {
                     try {
                         existing.close(4000, "replaced");
-                    } catch (_) {}
+                    } catch {
+                        /* 忽略 */
+                    }
                     try {
                         logger.info(
                             `Replaced existing socket for user=${socket.userId}`,
                         );
-                    } catch (_) {}
+                    } catch {
+                        /* 忽略 */
+                    }
                 }
                 if (socket.userId) userSockets.set(socket.userId, socket);
 
@@ -100,16 +123,22 @@ export function initWebSocket(httpServer: any, provider: () => Iterable<User>) {
                 logger.info(
                     `Sent welcome to user=${socket.userId} at ${welcome.time}`,
                 );
-            } catch (_) {}
-        } catch (e) {
+            } catch {
+                /* 忽略 */
+            }
+        } catch {
             try {
                 socket.send(
                     JSON.stringify({ type: "error", error: "INVALID_TOKEN" }),
                 );
-            } catch (_) {}
+            } catch {
+                /* 忽略 */
+            }
             try {
                 socket.close();
-            } catch (_) {}
+            } catch {
+                /* 忽略 */
+            }
             return;
         }
     });
@@ -123,15 +152,19 @@ export function initWebSocket(httpServer: any, provider: () => Iterable<User>) {
             if (s.isAlive === false) {
                 try {
                     client.terminate();
-                } catch (_) {}
+                } catch {
+                    /* 忽略 */
+                }
                 continue;
             }
             s.isAlive = false;
             try {
-                if ((client as any).readyState === 1) {
+                if (client.readyState === 1) {
                     client.send(JSON.stringify({ type: "ping" }));
                 }
-            } catch (_) {}
+            } catch {
+                /* 忽略 */
+            }
         }
     }, 30000);
 
@@ -167,10 +200,12 @@ export function broadcastTaskChange(
     for (const client of wss.clients) {
         const c = client as AuthedSocket;
         if (c.userId !== userId) continue;
-        if ((client as any).readyState === 1) {
+        if (client.readyState === 1) {
             try {
                 client.send(payload);
-            } catch (_) {}
+            } catch {
+                /* 忽略 */
+            }
         }
     }
 }
@@ -190,10 +225,12 @@ export function broadcastUserLog(
     for (const client of wss.clients) {
         const c = client as AuthedSocket;
         if (c.userId !== userId) continue;
-        if ((client as any).readyState === 1) {
+        if (client.readyState === 1) {
             try {
                 client.send(payload);
-            } catch (_) {}
+            } catch {
+                /* 忽略 */
+            }
         }
     }
 }
@@ -209,10 +246,12 @@ export function broadcastSmtpError(userId: string, message: string) {
     for (const client of wss.clients) {
         const c = client as AuthedSocket;
         if (c.userId !== userId) continue;
-        if ((client as any).readyState === 1) {
+        if (client.readyState === 1) {
             try {
                 client.send(payload);
-            } catch (_) {}
+            } catch {
+                /* 忽略 */
+            }
         }
     }
 }
@@ -229,10 +268,12 @@ function broadcastTaskOccurrence(task: Task, userId: string) {
     for (const client of wss.clients) {
         const c = client as AuthedSocket;
         if (c.userId !== userId) continue;
-        if ((client as any).readyState === 1) {
+        if (client.readyState === 1) {
             try {
                 client.send(payload);
-            } catch (_) {}
+            } catch {
+                /* 忽略 */
+            }
         }
     }
 }
@@ -247,10 +288,12 @@ function broadcastTaskOccurrenceCanceled(task: Task, userId: string) {
     for (const client of wss.clients) {
         const c = client as AuthedSocket;
         if (c.userId !== userId) continue;
-        if ((client as any).readyState === 1) {
+        if (client.readyState === 1) {
             try {
                 client.send(payload);
-            } catch (_) {}
+            } catch {
+                /* 忽略 */
+            }
         }
     }
 }

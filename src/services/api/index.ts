@@ -154,6 +154,10 @@ export type { ShareLink, SharedScheduleView } from "./share";
 export { getSpeechStatus, recognizeSpeech } from "./speech";
 export type { SpeechRecognizeResult, SpeechStatus } from "./speech";
 
+// ── 文件上传（日程附件存档）────────────────────────────
+export { uploadAttachment, listUploads, deleteUpload } from "./uploads";
+export type { UploadedFile, UploadListResponse } from "./uploads";
+
 // ── 会员与兑换码（MENU-001）────────────────────────────
 export {
     getMembership,

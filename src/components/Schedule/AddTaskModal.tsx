@@ -226,7 +226,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
             const todayStr = format(new Date(), "yyyy-MM-dd");
             let taskData: any;
 
-            let scheduleType: ScheduleType = "single";
+            const scheduleType: ScheduleType = "single";
 
             if (taskType === "interval") {
                 const startTime = new Date(`${todayStr}T${newTask.startTime}`);

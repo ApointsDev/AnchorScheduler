@@ -2,14 +2,24 @@
 
 exports[`Route registration contract (snapshot-based) adminRoutes.ts should have all expected routes registered 1`] = `
 [
+  "DELETE /app-update/:id",
+  "DELETE /reports/:id",
   "DELETE /users/:id",
+  "GET /app-update",
   "GET /check",
   "GET /fields",
+  "GET /membership/redeem-codes",
+  "GET /reports",
   "GET /users",
   "GET /users/:id",
   "GET /users/:id/schedule",
+  "PATCH /app-update/:id/enabled",
+  "PATCH /reports/:id",
   "PATCH /users/:id",
+  "POST /app-update",
   "POST /cache/refresh",
+  "POST /membership/grant",
+  "POST /membership/redeem-codes",
   "POST /users",
 ]
 `;
@@ -89,6 +99,9 @@ exports[`Route registration contract (snapshot-based) apiRoutes.ts should have a
   "GET /share/list",
   "GET /share/view/:token",
   "POST /share/create",
+  "DELETE /uploads/:filename",
+  "GET /uploads",
+  "POST /uploads",
 ]
 `;
 

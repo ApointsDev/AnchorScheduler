@@ -17,6 +17,7 @@ import {
     startOfWeek,
     endOfWeek,
     addDays,
+    addMinutes,
     startOfMonth,
     endOfMonth,
     isSameMonth,
@@ -223,7 +224,9 @@ const DaEventsPage: React.FC = () => {
                                 >
                                     {dayTasks.map((ev) => {
                                         const start = parseISO(ev.startTime);
-                                        const end = parseISO(ev.endTime);
+                                        const end = ev.endTime
+                                            ? parseISO(ev.endTime)
+                                            : addMinutes(start, 60);
                                         const startMinutes =
                                             start.getHours() * 60 +
                                             start.getMinutes();
@@ -363,12 +366,20 @@ const DaEventsPage: React.FC = () => {
 
     if (!page) return null;
 
+    // 周视图显示日期区间，避免 date-fns 的 W（ISO 周）令牌转义问题
+    const weekLabel = (() => {
+        const s = startOfWeek(currentDate, { weekStartsOn: 1 });
+        const e = endOfWeek(s, { weekStartsOn: 1 });
+        const fmt = i18n.language === "zh-CN" ? "MM月dd日" : "MMM d";
+        return `${format(s, fmt, { locale: dateLocale })} - ${format(e, fmt, { locale: dateLocale })}`;
+    })();
+
     const viewLabel =
         viewMode === "month"
-            ? monthFormat
+            ? format(currentDate, monthFormat, { locale: dateLocale })
             : viewMode === "week"
-              ? format(currentDate, "yyyy年MM月第W周")
-              : monthFormat;
+              ? weekLabel
+              : format(currentDate, monthFormat, { locale: dateLocale });
 
     return (
         <div className="da-page" style={accentStyle}>

@@ -173,9 +173,59 @@ export function registerEmailRoutes(
                     emailId,
                 );
 
-                const queue = await dbService.getScheduleQueueByUser(user.id);
+                // 实时拉取完整邮件（含 HTML），失败返回 null
+                const fetchLiveEmail = async (): Promise<EmailViewResponse | null> => {
+                    if (user.imapClient) {
+                        try {
+                            const email =
+                                await user.imapClient.getEmailById(emailId);
+                            return {
+                                email: {
+                                    id: email.id,
+                                    subject: email.subject,
+                                    from: email.from,
+                                    receivedAt: email.receivedAt,
+                                    isRead: email.isRead,
+                                    isAiProcessed,
+                                    body: email.body || "",
+                                    htmlBody: email.htmlBody || undefined,
+                                    hasAttachments: email.hasAttachments,
+                                    source: "imap",
+                                },
+                            };
+                        } catch {
+                            /* fall through */
+                        }
+                    }
+                    if (user.emsClient) {
+                        try {
+                            const email =
+                                await user.emsClient.getEmailById(emailId);
+                            return {
+                                email: {
+                                    id: email.id,
+                                    subject: email.subject,
+                                    from: email.from,
+                                    receivedAt: email.receivedAt,
+                                    isRead: email.isRead,
+                                    isAiProcessed,
+                                    body: email.body || "",
+                                    htmlBody: email.htmlBody || undefined,
+                                    hasAttachments: email.hasAttachments,
+                                    source: "exchange",
+                                },
+                            };
+                        } catch {
+                            /* fall through */
+                        }
+                    }
+                    return null;
+                };
 
-                // 先从队列缓存中查找
+                // 先从队列缓存中查找（保留命中项，供实时拉取失败时回落）
+                let cachedEmail: QueueEmailPayload["email"] | null = null;
+                let cachedSource: string | undefined;
+                const queue = await dbService.getScheduleQueueByUser(user.id);
                 for (const item of queue) {
                     let parsed: QueueEmailPayload | null = null;
                     try {
@@ -186,59 +236,56 @@ export function registerEmailRoutes(
                         continue;
                     }
                     if (parsed?.email?.id === emailId) {
-                        const e = parsed.email!;
-                        return res.status(200).json({
-                            email: {
-                                id: e.id,
-                                subject: e.subject,
-                                from: e.from,
-                                receivedAt: e.receivedAt,
-                                isRead: e.isRead,
-                                isAiProcessed,
-                                body: e.body || "",
-                                htmlBody: e.htmlBody || undefined,
-                                hasAttachments: e.hasAttachments,
-                                attachmentsCount: e.attachmentsCount,
-                                source: parsed._meta?.source,
-                            },
-                        } satisfies EmailViewResponse);
+                        cachedEmail = parsed.email!;
+                        cachedSource = parsed._meta?.source;
+                        break;
                     }
                 }
 
-                // 队列未命中，从 IMAP/Exchange 实时获取
-                if (user.imapClient) {
-                    try {
-                        const email =
-                            await user.imapClient.getEmailById(emailId);
-                        return res.status(200).json({
-                            email: {
-                                ...email,
-                                isAiProcessed,
-                                body: email.body || "",
-                                htmlBody: email.htmlBody || undefined,
-                                source: "imap",
-                            },
-                        } satisfies EmailViewResponse);
-                    } catch {
-                        /* fall through */
-                    }
+                // 命中缓存且含 htmlBody：直接返回缓存快照（无需实时拉取）
+                if (cachedEmail?.htmlBody) {
+                    const e = cachedEmail;
+                    return res.status(200).json({
+                        email: {
+                            id: e.id,
+                            subject: e.subject,
+                            from: e.from,
+                            receivedAt: e.receivedAt,
+                            isRead: e.isRead,
+                            isAiProcessed,
+                            body: e.body || "",
+                            htmlBody: e.htmlBody,
+                            hasAttachments: e.hasAttachments,
+                            attachmentsCount: e.attachmentsCount,
+                            source: cachedSource,
+                        },
+                    } satisfies EmailViewResponse);
                 }
-                if (user.emsClient) {
-                    try {
-                        const email =
-                            await user.emsClient.getEmailById(emailId);
-                        return res.status(200).json({
-                            email: {
-                                ...email,
-                                isAiProcessed,
-                                body: email.body || "",
-                                htmlBody: email.htmlBody || undefined,
-                                source: "exchange",
-                            },
-                        } satisfies EmailViewResponse);
-                    } catch {
-                        /* fall through */
-                    }
+
+                // 缓存缺 htmlBody（或未命中缓存）：实时拉取，让审批卡片能渲染完整 HTML
+                const live = await fetchLiveEmail();
+                if (live) {
+                    return res.status(200).json(live);
+                }
+
+                // 实时拉取失败：回落队列缓存快照
+                if (cachedEmail) {
+                    const e = cachedEmail;
+                    return res.status(200).json({
+                        email: {
+                            id: e.id,
+                            subject: e.subject,
+                            from: e.from,
+                            receivedAt: e.receivedAt,
+                            isRead: e.isRead,
+                            isAiProcessed,
+                            body: e.body || "",
+                            htmlBody: e.htmlBody || undefined,
+                            hasAttachments: e.hasAttachments,
+                            attachmentsCount: e.attachmentsCount,
+                            source: cachedSource,
+                        },
+                    } satisfies EmailViewResponse);
                 }
 
                 return res.status(404).json({ error: "Email not found" });

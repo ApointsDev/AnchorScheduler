@@ -165,7 +165,7 @@ export class CommunityStore {
         const { weekStart, weekEnd } = getShanghaiWeekRange(now);
         const limit = Math.max(1, Math.min(100, opts?.limit ?? 20));
 
-        let regionId = opts?.regionId || (await this.getUserRegionId(userId));
+        const regionId = opts?.regionId || (await this.getUserRegionId(userId));
         if (!regionId) {
             throw new CommunityRegionRequiredError();
         }

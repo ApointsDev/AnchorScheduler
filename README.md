@@ -40,6 +40,15 @@ For optimal experience, pair with your phone's built-in "Calendar" and "Email" a
 - [待开发] 屏幕OCR识别添加日程 / Add Schedule via Screen OCR Recognition
 - [开发中] React Native日程管理移动应用 / React Native Mobile Application
 
+### 🏫 DA 校园大事件 / Campus Events (Multi-School)
+面向大学 Development Advisor（DA）团队的一站式「校园大事件」能力，支持扩展到多所学校：
+- **免登录公开页** `/xjtlu/events`（月 / 周 / 列表视图），落地页 `/events` 列出全部学校
+- **DA 管理后台** `/admin/da/:slug`：事件 CRUD、AI 导入、队列审批、邮箱设置、学生贡献名单
+- **系统管理员** `/admin/schools`：新增/停用学校、配置各校 DA 管理员
+- **DA 团队邮箱**：各学院邮件发到专用邮箱，IMAP 轮询 + NLP 提取后入待审批队列
+- **学生贡献**：学生绑定邮箱后开启开关，收到的学院通知邮件将匿名化推荐给 DA 审核
+- API 文档：[`docs/api/da.md`](docs/api/da.md)
+
 
 ## 📦 项目结构 / Project Structure
 

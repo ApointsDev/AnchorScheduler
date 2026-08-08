@@ -6,7 +6,8 @@
 //   学校 DA 管理员（JWT + isDaAdminForSchool）：/admin/:slug/*
 // 路由注册顺序敏感：/admin/... 与 /optin 等静态段必须先于 /:slug/... 注册。
 
-import express from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
+import type { ParamsFlatDictionary } from "express-serve-static-core";
 import { daService } from "../Services/daService.js";
 import { dbService } from "../Services/dbService.js";
 import { logger } from "../Utils/logger.js";
@@ -14,23 +15,25 @@ import type { AuthMiddleware } from "./apiTypes.js";
 import type { User } from "../index";
 import type { School } from "../Services/db/schools.js";
 
+/** 路由请求：路径参数使用扁平字典（Express 5 类型默认可能是 string|string[]） */
+type RouteRequest = Request<ParamsFlatDictionary>;
+
 export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
     const router = express.Router();
 
     // 异步处理包装，避免每个 handler 重复 try/catch
     const asyncHandler =
-        (fn: (req: any, res: any) => Promise<void>) =>
-        (req: any, res: any, next: any) => {
-            fn(req, res).catch((e: any) => {
-                logger.error(`DA route error: ${e?.message || e}`);
-                res
-                    .status(500)
-                    .json({ error: e?.message || "内部错误" });
+        (fn: (req: RouteRequest, res: Response) => Promise<unknown>) =>
+        (req: RouteRequest, res: Response): void => {
+            fn(req, res).catch((e: unknown) => {
+                const message = e instanceof Error ? e.message : String(e);
+                logger.error(`DA route error: ${message}`);
+                res.status(500).json({ error: message });
             });
         };
 
     // ── 系统管理员守卫 ─────────────────────────────────────────
-    const requireSystemAdmin = (req: any, res: any, next: any) => {
+    const requireSystemAdmin = (req: RouteRequest, res: Response, next: NextFunction) => {
         const user = req.user as User | undefined;
         if (!user || !daService.isSystemAdmin(user.email)) {
             return res.status(403).json({ error: "需要系统管理员权限" });
@@ -39,7 +42,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
     };
 
     // ── 学校 DA 管理员守卫（按 slug）──────────────────────────
-    const requireSchoolAdmin = async (req: any, res: any, next: any) => {
+    const requireSchoolAdmin = async (req: RouteRequest, res: Response, next: NextFunction) => {
         const user = req.user as User | undefined;
         if (!user) return res.status(401).json({ error: "未登录" });
         const school = await daService.getSchoolBySlug(req.params.slug);
@@ -63,7 +66,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
     router.get(
         "/optin",
         authenticateToken,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const user = req.user as User;
             const optins = await daService.listSchoolsByOptinUser(
                 user.id,
@@ -76,7 +79,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
     router.put(
         "/optin",
         authenticateToken,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const user = req.user as User;
             const { schoolId, optedIn } = req.body || {};
             if (!schoolId) {
@@ -101,7 +104,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
     router.get(
         "/admin/my-schools",
         authenticateToken,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const user = req.user as User;
             const schools = await daService.listMySchools(user.email);
             res.json({
@@ -122,7 +125,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/schools",
         authenticateToken,
         requireSystemAdmin,
-        asyncHandler(async (_req: any, res: any) => {
+        asyncHandler(async (_req: RouteRequest, res: Response) => {
             const schools = await daService.listSchools({
                 includeDisabled: true,
             });
@@ -151,7 +154,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/schools",
         authenticateToken,
         requireSystemAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const { slug, name, eventsEmail, themeColor } = req.body || {};
             const school = await daService.createSchool({
                 slug,
@@ -168,7 +171,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/schools/:schoolId",
         authenticateToken,
         requireSystemAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const { slug, name, eventsEmail, themeColor, enabled } =
                 req.body || {};
             const school = await daService.updateSchool(
@@ -187,7 +190,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/schools/:schoolId",
         authenticateToken,
         requireSystemAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const ok = await daService.deleteSchool(
                 req.params.schoolId,
             );
@@ -203,7 +206,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/schools/:schoolId/admins",
         authenticateToken,
         requireSystemAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const admins = await daService.listSchoolAdmins(
                 req.params.schoolId,
             );
@@ -216,7 +219,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/schools/:schoolId/admins",
         authenticateToken,
         requireSystemAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const { email } = req.body || {};
             if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
                 return res.status(400).json({ error: "邮箱格式不正确" });
@@ -234,7 +237,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/schools/:schoolId/admins/:email",
         authenticateToken,
         requireSystemAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             await daService.removeSchoolAdmin(
                 req.params.schoolId,
                 decodeURIComponent(req.params.email),
@@ -250,7 +253,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/events",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const events = await daService.listAllEvents(req.school);
             res.json({ events });
         }),
@@ -261,7 +264,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/events",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const event = await daService.createEvent(
                 req.school as School,
                 req.body || {},
@@ -275,7 +278,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/events/:id",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const event = await daService.updateEvent(
                 req.school as School,
                 req.params.id,
@@ -290,7 +293,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/events/:id",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const ok = await daService.deleteEvent(
                 req.school as School,
                 req.params.id,
@@ -307,7 +310,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/queue",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const queue = await daService.getQueue(req.school);
             res.json(queue);
         }),
@@ -318,7 +321,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/queue/:id/approve",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const result = await daService.approveQueueItem(
                 req.school as School,
                 req.params.id,
@@ -338,7 +341,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/queue/:id/reject",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const result = await daService.rejectQueueItem(
                 req.school as School,
                 req.params.id,
@@ -355,7 +358,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/import",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const { text } = req.body || {};
             if (!text || !String(text).trim()) {
                 return res
@@ -375,7 +378,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/settings",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const settings = await daService.getSettings(req.school);
             const page = await daService.getPageConfig(req.school);
             res.json({ settings, page });
@@ -387,7 +390,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/settings",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const { settings, page } = req.body || {};
             if (settings && typeof settings === "object") {
                 await daService.updateSettings(req.school, settings);
@@ -406,7 +409,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/mail/refresh",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             await daService.refreshDaMail(req.school as School);
             res.json({ ok: true });
         }),
@@ -417,7 +420,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/students",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const { rows, total } = await daService.listStudents(
                 req.school.id,
                 {
@@ -446,7 +449,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
         "/admin/:slug/students/:userId",
         authenticateToken,
         requireSchoolAdmin,
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             await daService.setOptin(
                 req.school.id,
                 req.params.userId,
@@ -461,7 +464,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
     // GET /api/da/schools — 启用中的学校列表（公开）
     router.get(
         "/schools",
-        asyncHandler(async (_req: any, res: any) => {
+        asyncHandler(async (_req: RouteRequest, res: Response) => {
             const schools = await daService.listSchools();
             res.json({
                 schools: schools.map((s) => ({
@@ -478,7 +481,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
     // GET /api/da/:slug/events
     router.get(
         "/:slug/events",
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const school = await daService.getSchoolBySlug(
                 req.params.slug,
             );
@@ -496,7 +499,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
     // GET /api/da/:slug/events/:id
     router.get(
         "/:slug/events/:id",
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const school = await daService.getSchoolBySlug(
                 req.params.slug,
             );
@@ -517,7 +520,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
     // GET /api/da/:slug/page
     router.get(
         "/:slug/page",
-        asyncHandler(async (req: any, res: any) => {
+        asyncHandler(async (req: RouteRequest, res: Response) => {
             const school = await daService.getSchoolBySlug(
                 req.params.slug,
             );

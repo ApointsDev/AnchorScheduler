@@ -576,7 +576,7 @@ export class DaService {
     ): Promise<void> {
         for (const [key, raw] of Object.entries(patch)) {
             if (!(key in DEFAULT_SETTINGS)) continue;
-            let value = String(raw);
+            const value = String(raw);
             // 密码掩码回显值不允许写回
             if (key === "mailPassword" && value === "••••••••") continue;
             await dbService.setDaSetting(school.id, key, value);

@@ -45,6 +45,107 @@ export interface EmailProcessResponse {
 /** 校验失败后最多再请求 LLM 的次数 */
 const TOOL_TIME_VALIDATION_MAX_RETRIES = 3;
 
+/**
+ * 净化发给 LLM 的 messages 序列，使其满足 OpenAI/DeepSeek 的合法性约束。
+ *
+ * 问题场景：assistant 消息带 tool_calls 但后续缺少对应的 tool 响应（工具执行被
+ * 中断、会话截断、历史同步缺失等），上游 API 会以 400 invalid_request_error
+ * 拒绝。此处剥离悬空的 tool_calls 并丢弃孤儿 tool 消息。
+ *
+ * 规则：
+ * 1. assistant(tool_calls) 后紧随的连续 tool 消息完整回应了所有 tool_call_id → 整组原样保留。
+ * 2. 缺少部分/全部 tool 响应（悬空）→ 剥离 tool_calls、退回普通纯文本 assistant（content 保留，
+ *    可为空串），并丢弃其后无法回应的孤儿 tool 消息。
+ * 3. 孤儿 tool 消息（前面无带 tool_calls 的 assistant，或 tool_call_id 为空/不匹配）一律丢弃。
+ * 4. system / user / 不带 tool_calls 的普通 assistant 原样保留。
+ * 5. 保持合法多轮 tool 对话的语义与相对顺序不变。
+ */
+export function sanitizeLLMMessages(messages: any[]): any[] {
+    const result: any[] = [];
+    let i = 0;
+
+    while (i < messages.length) {
+        const msg = messages[i];
+
+        // 带 tool_calls 的 assistant 消息：检查其后连续的 tool 消息是否完整回应
+        if (
+            msg?.role === "assistant" &&
+            Array.isArray(msg.tool_calls) &&
+            msg.tool_calls.length > 0
+        ) {
+            const callIds = new Set<string>(
+                msg.tool_calls
+                    .map((tc: any) => tc?.id)
+                    .filter(
+                        (id: any) =>
+                            id !== undefined && id !== null && id !== "",
+                    ),
+            );
+
+            // 收集紧随其后的连续 tool 消息
+            let j = i + 1;
+            const toolMsgs: any[] = [];
+            while (j < messages.length && messages[j]?.role === "tool") {
+                toolMsgs.push(messages[j]);
+                j++;
+            }
+
+            // 有效回应：tool_call_id 非空且属于该 assistant 的 tool_calls
+            const validToolMsgs = toolMsgs.filter(
+                (t: any) => t?.tool_call_id && callIds.has(t.tool_call_id),
+            );
+            const coveredIds = new Set(
+                validToolMsgs.map((t: any) => t.tool_call_id),
+            );
+
+            // 所有 tool_call_id 都得到回应 → 整组原样保留（组内孤儿 tool 丢弃）
+            const complete =
+                callIds.size > 0 &&
+                Array.from(callIds).every((id) => coveredIds.has(id));
+
+            if (complete) {
+                result.push(msg);
+                result.push(...validToolMsgs);
+                i = j;
+                continue;
+            }
+
+            // 悬空：剥离 tool_calls 退回普通 assistant，丢弃其后所有无法回应的 tool 消息
+            const { tool_calls, ...rest } = msg;
+            result.push({
+                ...rest,
+                content: msg.content ?? "",
+            });
+            i = j;
+            continue;
+        }
+
+        // 空的 tool_calls 数组视为普通 assistant：剥离空字段避免上游校验失败
+        if (
+            msg?.role === "assistant" &&
+            Array.isArray(msg.tool_calls) &&
+            msg.tool_calls.length === 0
+        ) {
+            const { tool_calls, ...rest } = msg;
+            result.push(rest);
+            i++;
+            continue;
+        }
+
+        // 孤儿 tool 消息（无前置带 tool_calls 的 assistant）一律丢弃
+        if (msg?.role === "tool") {
+            i++;
+            continue;
+        }
+
+        // system / user / 不带 tool_calls 的普通 assistant 原样保留
+        result.push(msg);
+        i++;
+    }
+
+    return result;
+}
+
 export class LLMApi {
     private openai: OpenAI;
     private model: string;
@@ -171,7 +272,7 @@ ${promotionHint}
                 logger.success(
                     `邮件处理成功，触发工具调用: ${toolCall.function.name}`,
                 );
-                let toolCalls = await this.ensureValidScheduleType(
+                const toolCalls = await this.ensureValidScheduleType(
                     email,
                     message.tool_calls as any[],
                 );
@@ -466,13 +567,15 @@ ${validationError}
         onData: (data: { content?: string; tool_calls?: any[] }) => void,
     ): Promise<void> {
         try {
+            // 净化 messages：剥离悬空 tool_calls、丢弃孤儿 tool 消息，避免上游 400
+            const sanitizedMessages = sanitizeLLMMessages(messages);
             logger.data(
-                `[LLM Stream Request] Messages: ${JSON.stringify(messages, null, 2)}`,
+                `[LLM Stream Request] Messages: ${JSON.stringify(sanitizedMessages, null, 2)}`,
             );
 
             const stream = await this.openai.chat.completions.create({
                 model: this.model,
-                messages: messages,
+                messages: sanitizedMessages,
                 tools: tools,
                 stream: true,
                 temperature: 0.7,

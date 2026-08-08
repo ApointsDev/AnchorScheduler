@@ -162,7 +162,7 @@ export function createAuthRoutes(ctx: AuthRouteContext): express.Router {
             })();
         const loginHint = req.query.login_hint as string;
 
-        let stateObj: any = {};
+        const stateObj: any = {};
         if (providedJwt) stateObj.jwt = providedJwt;
         if (loginHint) stateObj.email = loginHint;
 
@@ -260,7 +260,7 @@ export function createAuthRoutes(ctx: AuthRouteContext): express.Router {
                 const decoded = verifyJwt(providedJwt);
                 if (decoded && decoded.sub) {
                     const userId = decoded.sub as string;
-                    let user =
+                    const user =
                         (await dbService.getUserById(userId)) || undefined;
                     if (user) {
                         user.ExchangeAccessToken = access_token;

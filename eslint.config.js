@@ -19,5 +19,14 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // 空 catch 块（如容错解析、忽略性清理）是合法惯用法
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      // 以下划线开头的未使用参数/变量是显式"有意忽略"约定
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
   },
 ])

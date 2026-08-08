@@ -460,7 +460,7 @@ export class AlgorithmService {
     // 2. 生成可用时间槽
     // 范围：从现在（或最早任务开始时间）到最晚截止时间
     const now = new Date();
-    let rangeStart = now;
+    const rangeStart = now;
     let rangeEnd = now;
 
     if (ddlTasks.length > 0) {
@@ -483,7 +483,7 @@ export class AlgorithmService {
     // generateTimeSlots 只生成一天的，我们需要扩展到 rangeEnd
     
     const expandedSlots: TimeSlot[] = [];
-    let currentDay = new Date(rangeStart);
+    const currentDay = new Date(rangeStart);
     currentDay.setHours(0, 0, 0, 0);
     const endDay = new Date(rangeEnd);
     endDay.setHours(0, 0, 0, 0);

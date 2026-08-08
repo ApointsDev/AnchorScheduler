@@ -29,7 +29,7 @@ export async function chatCompletion(
   // We'll assume the user provides the base URL up to the point where /chat/completions is appended.
   // If the user provides "https://api.openai.com/v1", we append "/chat/completions".
   
-  let baseUrl = config.baseUrl.replace(/\/$/, '');
+  const baseUrl = config.baseUrl.replace(/\/$/, '');
   // Simple heuristic: if it doesn't end in /v1 and doesn't look like a full path, maybe append /v1?
   // But let's trust the user input or just append /chat/completions.
   

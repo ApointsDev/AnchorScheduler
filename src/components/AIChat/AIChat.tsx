@@ -359,7 +359,7 @@ const AIChat: React.FC = () => {
 
         try {
             // 每次调用使用最新的系统时间
-            let currentMessages = [makeSystemMsg(t), ...messages, userMsg];
+            const currentMessages = [makeSystemMsg(t), ...messages, userMsg];
             let response = await chatCompletion(
                 currentMessages,
                 effectiveConfig,

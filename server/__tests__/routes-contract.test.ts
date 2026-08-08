@@ -54,6 +54,7 @@ describe("Route registration contract (snapshot-based)", () => {
       "emailRoutes.ts",
       "userRoutes.ts",
       "shareRoutes.ts",
+      "uploadRoutes.ts",
     ];
 
     beforeAll(() => {

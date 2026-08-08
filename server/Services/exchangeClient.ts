@@ -25,6 +25,7 @@ import {
     StreamingSubscriptionConnection,
     EventType,
     MessageBody,
+    BodyType,
     NotificationEvent,
     Importance,
     ConflictResolutionMode,
@@ -140,6 +141,11 @@ export class ExchangeClient {
             body: includeBody
                 ? this.cleanHtmlContent(message.body?.content || "")
                 : undefined,
+            // Graph body 携带 contentType（"html"/"text"），html 类型直接暴露源码
+            htmlBody:
+                includeBody && message.body?.contentType === "html"
+                    ? message.body.content || undefined
+                    : undefined,
             hasAttachments: !!message.hasAttachments,
         };
     }
@@ -1390,9 +1396,16 @@ export class ExchangeClient {
         includeBody: boolean = false,
     ): IEmail {
         const from = email.From;
-        const bodyText = includeBody
-            ? this.cleanHtmlContent(email.Body?.Text || "")
+        const body = includeBody ? email.Body : undefined;
+        const bodyText = body
+            ? this.cleanHtmlContent(body.Text || "")
             : undefined;
+        // EWS 未指定 RequestedBodyType 时默认按 HTML 返回正文（若有）；
+        // BodyType.HTML 时 Text 即 HTML 源码，可直接作为 htmlBody
+        const htmlBody =
+            body && body.BodyType === BodyType.HTML
+                ? body.Text || undefined
+                : undefined;
 
         // 读取 EWS 标记状态
         let isFlagged = false;
@@ -1423,6 +1436,7 @@ export class ExchangeClient {
             flags: ewsFlags,
             isAiProcessed: false,
             body: bodyText,
+            htmlBody,
             hasAttachments: email.HasAttachments,
             attachments: email.Attachments,
         };

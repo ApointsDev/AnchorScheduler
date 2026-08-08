@@ -55,8 +55,8 @@ export class CommunityDetectionAlgorithm {
     const m = totalWeight / 2;
 
     // Current state
-    let currentCommunities = Array(n).fill(0).map((_, i) => i); // Each node in its own community initially
-    let hierarchy: Array<{ level: number, communities: Map<string, number>, modularity: number }> = [];
+    const currentCommunities = Array(n).fill(0).map((_, i) => i); // Each node in its own community initially
+    const hierarchy: Array<{ level: number, communities: Map<string, number>, modularity: number }> = [];
     
     // Helper to calculate modularity Q
     // Q = (1/2m) * sum_ij [ (A_ij - k_i*k_j/(2m)) * delta(c_i, c_j) ]
@@ -78,8 +78,8 @@ export class CommunityDetectionAlgorithm {
     }
 
     // Initial community state (each node is a community)
-    let commWeightIn = Array(n).fill(0); // Self-loops only initially
-    let commWeightTot = [...nodeWeight]; // Total weight is just node weight
+    const commWeightIn = Array(n).fill(0); // Self-loops only initially
+    const commWeightTot = [...nodeWeight]; // Total weight is just node weight
     
     // Handle self-loops for commWeightIn
     for (let i = 0; i < n; i++) {
@@ -157,8 +157,8 @@ export class CommunityDetectionAlgorithm {
           // Remove i from old community effectively
           // We compare placing i in oldComm vs neighbors.
           
-          let bestComm = oldComm;
-          let maxGain = 0; // Gain must be positive to move (or better than staying 0)
+          const bestComm = oldComm;
+          const maxGain = 0; // Gain must be positive to move (or better than staying 0)
           
           // Calculate gain for staying (or rather, cost of removing? No, just compare gains)
           // Actually, standard way: Remove i, then insert into best neighbor.
@@ -170,7 +170,7 @@ export class CommunityDetectionAlgorithm {
           // Note: 2*m is constant. We can optimize.
           // Gain ~ 2*m*w_to_c - Sigma_tot * ki * resolution
           
-          let bestScore = gainOld; // Start with staying score (actually we compare diff, but absolute score works if consistent)
+          const bestScore = gainOld; // Start with staying score (actually we compare diff, but absolute score works if consistent)
           // Wait, the formula is for *change*.
           // Let's calculate Delta Q for moving from Isolated to C.
           // But i is currently in oldComm.

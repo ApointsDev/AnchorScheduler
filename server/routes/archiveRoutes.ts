@@ -17,10 +17,11 @@ import {
     ArchiveNotArchivedError,
 } from "../Services/db/archiveErrors.js";
 import type { AuthMiddleware } from "./apiRoutes.js";
+import type { User } from "../index";
 
 /** 已认证请求（authenticateToken 已填充 req.user） */
 interface AuthedRequest extends Request {
-    user: { id: string };
+    user: User;
 }
 
 /** 各资源响应包裹字段名 */

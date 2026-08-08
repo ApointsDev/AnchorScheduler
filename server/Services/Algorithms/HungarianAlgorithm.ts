@@ -109,7 +109,7 @@ export class HungarianAlgorithm {
       // Using the array-based implementation which is O(N^3)
       // Based on a common competitive programming template
       
-      let p = 0;
+      const p = 0;
       matchY[0] = i; 
       // We need matchY to be size+1 and way to be size+1 if we use the 1-based trick with matchY[0] as current row
       // Let's adjust arrays to size+1

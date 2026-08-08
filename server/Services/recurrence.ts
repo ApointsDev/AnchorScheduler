@@ -18,8 +18,8 @@ export function generateRecurrenceInstances(root: Task, rule: RecurrenceRule | a
     const maxIterations = count ? count - 1 : 500; // root already counts as one
     let generated = 0;
     if (freq === 'daily') {
-      let cursorStart = new Date(start);
-      let cursorEnd = new Date(end);
+      const cursorStart = new Date(start);
+      const cursorEnd = new Date(end);
       while (generated < maxIterations) {
         cursorStart.setDate(cursorStart.getDate() + interval);
         cursorEnd.setDate(cursorEnd.getDate() + interval);
@@ -73,8 +73,8 @@ export function generateRecurrenceInstances(root: Task, rule: RecurrenceRule | a
       const weeks: number[] = Array.isArray(rule.weeks) ? rule.weeks : [];
       if (weeks.length === 0) return instances;
       // Iterate week by week starting from start, generate instances on the weekday of start
-      let cursorStart = new Date(start);
-      let cursorEnd = new Date(end);
+      const cursorStart = new Date(start);
+      const cursorEnd = new Date(end);
       let iterations = 0;
       while (generated < maxIterations && iterations < 5000) {
         // advance one week each iteration
@@ -97,8 +97,8 @@ export function generateRecurrenceInstances(root: Task, rule: RecurrenceRule | a
       // rule.days: array of weekday indices 0(Sun)-6(Sat)
       const days: number[] = Array.isArray(rule.days) ? rule.days : [];
       if (days.length === 0) return instances;
-      let cursorStart = new Date(start);
-      let cursorEnd = new Date(end);
+      const cursorStart = new Date(start);
+      const cursorEnd = new Date(end);
       // move forward day by day
       let iterations = 0;
       while (generated < maxIterations && iterations < 5000) {

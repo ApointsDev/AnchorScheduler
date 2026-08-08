@@ -572,7 +572,7 @@ router.all("/proxy/*", async (req, res) => {
     let targetUrl = "";
     let base = "";
     try {
-        let parsed = parseProxyPath(req.path);
+        const parsed = parseProxyPath(req.path);
         if (!parsed) {
             const without = req.path.replace(/^\/proxy\//, "");
             const defaultPfx = Object.keys(DOMAINS)[0] || "eb";
