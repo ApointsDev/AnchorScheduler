@@ -8,6 +8,7 @@
 
 import express from "express";
 import { daService } from "../Services/daService.js";
+import { dbService } from "../Services/dbService.js";
 import { logger } from "../Utils/logger.js";
 import type { AuthMiddleware } from "./apiTypes.js";
 import type { User } from "../index";
@@ -531,8 +532,7 @@ export function initializeDaRoutes(authenticateToken: AuthMiddleware) {
     return router;
 }
 
-// 学生贡献名单附带用户简要信息（避免循环依赖，本地查询）
-import { dbService } from "../Services/dbService.js";
+// 学生贡献名单附带用户简要信息
 async function dbUserBrief(userId: string) {
     try {
         const u = await dbService.getUserById(userId);

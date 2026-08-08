@@ -21,7 +21,7 @@ import {
     type DaPageConfig,
     type DaStudentRow,
 } from "../../services/api";
-import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
+import { Card, CardContent } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
@@ -35,7 +35,6 @@ import {
     X,
     RefreshCw,
     ArrowLeft,
-    Mail,
     AlertCircle,
     Users,
     FileText,
@@ -99,7 +98,7 @@ function formatQueueTime(args: any): string {
 }
 
 const DaAdminPanel: React.FC = () => {
-    const { t, i18n } = useTranslation();
+    const { t } = useTranslation();
     const { slug } = useParams<{ slug: string }>();
     const [tab, setTab] = useState<Tab>("events");
 
@@ -990,3 +989,5 @@ const DaAdminPanel: React.FC = () => {
         </div>
     );
 };
+
+export default DaAdminPanel;

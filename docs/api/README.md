@@ -22,8 +22,7 @@
 | [chat.md](chat.md) | LLM 对话 / 聊天上下文 | 8 |
 | [calendar.md](calendar.md) | CalDAV / 课表同步 | 12 |
 | [admin.md](admin.md) | 管理后台 | 9 |
-| [integrations.md](integrations.md) | 算法 / 豆包 / 语音识别 / MCP / Ebridge | 17 |
-| [reference.md](reference.md) | 数据结构 / WebSocket / 状态码 | — |
+| [integrations.md](integrations.md) | 算法 / 豆包 / 语音识别 / MCP / Ebridge | 17 || [da.md](da.md) | DA 校园大事件（多校） | 24 || [reference.md](reference.md) | 数据结构 / WebSocket / 状态码 | — |
 
 ## 认证说明
 

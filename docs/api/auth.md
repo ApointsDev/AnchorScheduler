@@ -38,12 +38,16 @@ Exchange OAuth 回调，绑定 access/refresh token。
 
 ### `POST /auth/imap/bind` 🔒
 ```
-Body: { email, password, host, port, tls }
+Body: { imapEmail, imapPassword, imapHost, imapPort, imapTls }
+Response: { success: true, message }
 ```
-绑定 IMAP 邮箱。
+绑定 IMAP 邮箱。`imapPort` 为数字，`imapTls` 缺省为 `true`。
 
 ### `POST /auth/imap/unbind` 🔒
-解绑 IMAP 邮箱。
+```
+Response: { success: true, message }
+```
+解绑 IMAP 邮箱并清除绑定信息。
 
 ---
 

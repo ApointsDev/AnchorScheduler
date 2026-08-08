@@ -193,18 +193,25 @@ interface RecurrenceRule {
 
 ### Email（邮件）
 ```typescript
-interface Email {
+/** 列表项（不含正文） */
+interface EmailListItem {
     id: string;
     subject: string;
-    from: string;
-    to: string[];
-    date: string;
-    body: string;
-    html?: string;
-    attachments: Attachment[];
+    from?: { name: string; address: string };
+    receivedAt: string;
     isRead: boolean;
     isFlagged: boolean;
-    aiProcessed: boolean;
+    flags: string[];
+    isAiProcessed: boolean;
+    hasAttachments: boolean;
+}
+
+/** 原始邮件（含正文，用于详情） */
+interface RawEmail extends EmailListItem {
+    body: string;
+    htmlBody?: string;
+    attachmentsCount?: number;
+    source?: "imap" | "exchange";
 }
 ```
 
