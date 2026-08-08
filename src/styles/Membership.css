@@ -15,6 +15,46 @@
     min-height: 50vh;
 }
 
+/* ── 设置内二级页面：顶部返回栏 ─────────────────── */
+.membership-page-header {
+    display: flex;
+    align-items: center;
+}
+
+/* ── 设置页入口卡片 ───────────────────────────── */
+.membership-entry-card {
+    border-color: var(--color-brand-primary);
+}
+
+.membership-entry-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.membership-entry-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.membership-entry-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-brand-primary);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+}
+
+.membership-entry-meta {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-medium);
+}
+
 /* ── 当前会员状态 ─────────────────────────── */
 .membership-current-card {
     border-color: var(--color-brand-primary);

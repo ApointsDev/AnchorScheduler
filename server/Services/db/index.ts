@@ -104,6 +104,19 @@ import {
     type RedeemCode,
     type RedeemResult,
 } from "./membership";
+import {
+    UserReportStore,
+    type ReportListOpts,
+    type ReportListResult,
+    type ReportStatus,
+    type ReportType,
+    type UserReport,
+} from "./reports";
+import {
+    AppUpdateStore,
+    type AppPlatform,
+    type AppRelease,
+} from "./appUpdate";
 import type { TodoPageOpts } from "./todos";
 import type {
     CommunityRankMetric,
@@ -120,6 +133,8 @@ export type {
     RedeemCode,
     RedeemResult,
 };
+export type { ReportListOpts, ReportListResult, ReportStatus, ReportType, UserReport };
+export type { AppPlatform, AppRelease };
 
 export class DatabaseService {
     private db: Database | null = null;
@@ -146,6 +161,8 @@ export class DatabaseService {
     reminderStates!: ReminderStateStore;
     archive!: ArchiveStore;
     membership!: MembershipStore;
+    reports!: UserReportStore;
+    appUpdate!: AppUpdateStore;
 
     async initialize() {
         try {
@@ -203,6 +220,8 @@ export class DatabaseService {
                 this.tags,
             );
             this.membership = new MembershipStore(this.db);
+            this.reports = new UserReportStore(this.db);
+            this.appUpdate = new AppUpdateStore(this.db);
 
             logger.success("Database initialized successfully");
         } catch (error) {
@@ -258,6 +277,13 @@ export class DatabaseService {
         return this.users.getAllUsers((uid) =>
             this.tasks.getTasksByUserId(uid),
         );
+    }
+    async getUsersPage(opts: {
+        search?: string;
+        limit: number;
+        offset: number;
+    }) {
+        return this.users.getUsersPage(opts);
     }
     async updateUserHighEnergyPeriods(
         userId: string,

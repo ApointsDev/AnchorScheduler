@@ -9,6 +9,7 @@ import { getTier, MEMBERSHIP_TIERS } from "../Services/db/membershipTiers.js";
 import {
     MembershipError,
     MembershipInvalidArgumentError,
+    PurchaseDisabledError,
     RedeemCodeAlreadyUsedError,
     RedeemCodeExhaustedError,
     RedeemCodeExpiredError,
@@ -17,6 +18,10 @@ import {
     TierNotFoundError,
 } from "../Services/db/membershipErrors.js";
 import type { AuthMiddleware } from "./apiRoutes.js";
+
+/** 内测阶段购买开关：默认关闭，仅允许兑换码开通。
+ *  设置环境变量 MEMBERSHIP_PURCHASE_ENABLED=true 可开启购买。 */
+const PURCHASE_ENABLED = process.env.MEMBERSHIP_PURCHASE_ENABLED === "true";
 
 /** 已认证请求（authenticateToken 已填充 req.user） */
 interface AuthedRequest extends Request {
@@ -47,6 +52,13 @@ function mapMembershipError(
     if (e instanceof RedeemCodeAlreadyUsedError) {
         res.status(409).json({
             error: "CODE_ALREADY_USED",
+            message: e.message,
+        });
+        return;
+    }
+    if (e instanceof PurchaseDisabledError) {
+        res.status(409).json({
+            error: "PURCHASE_DISABLED",
             message: e.message,
         });
         return;
@@ -94,6 +106,7 @@ export function initializeMembershipRoutes(authenticateToken: AuthMiddleware) {
                 plans: tiers.filter((t: { purchasable: boolean }) => t.purchasable),
                 tiers,
                 current: summary,
+                purchaseEnabled: PURCHASE_ENABLED,
             });
         } catch (e: unknown) {
             mapMembershipError(res, e, "Failed to get membership plans");
@@ -106,6 +119,10 @@ export function initializeMembershipRoutes(authenticateToken: AuthMiddleware) {
     // → 创建订单并完成（mock 支付），返回 { order, grant, membership }
     const handlePurchase: RequestHandler = async (req, res) => {
         try {
+            if (!PURCHASE_ENABLED) {
+                // 内测阶段仅允许兑换码开通，购买入口关闭
+                throw new PurchaseDisabledError();
+            }
             const userId = (req as AuthedRequest).user.id;
             const body = (req.body || {}) as {
                 tierId?: string;

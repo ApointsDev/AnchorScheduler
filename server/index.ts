@@ -33,6 +33,8 @@ import { initializeChaoxingRoutes } from "./routes/chaoxingRoutes";
 import { initializeReminderStateRoutes } from "./routes/reminderStateRoutes";
 import { initializeArchiveRoutes } from "./routes/archiveRoutes.js";
 import { initializeMembershipRoutes } from "./routes/membershipRoutes.js";
+import { initializeReportRoutes } from "./routes/reportRoutes.js";
+import { initializeAppUpdateRoutes } from "./routes/appUpdateRoutes.js";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
@@ -385,6 +387,12 @@ app.use("/api", initializeArchiveRoutes(authenticateToken));
 
 // 会员与兑换码路由（MENU-001）
 app.use("/api", initializeMembershipRoutes(authenticateToken));
+
+// 用户反馈 / 举报（RPT-001）
+app.use("/api", initializeReportRoutes(authenticateToken));
+
+// 应用版本更新检查（UPD-001）
+app.use("/api", initializeAppUpdateRoutes(authenticateToken));
 
 // 用户状态统计路由
 app.use("/api", initializeUserStatusRoutes(authenticateToken));

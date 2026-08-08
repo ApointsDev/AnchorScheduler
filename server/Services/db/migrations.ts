@@ -697,4 +697,50 @@ export async function runMigrations(db: Database): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_redeem_redemptions_user_code
          ON redeem_code_redemptions(userId, code);`
   );
+
+  // ── 用户反馈 / 举报（RPT-001）──────────────────────────
+  // type: feedback（反馈）/ report（举报）
+  // status: pending（待处理）/ processing（处理中）/ resolved（已解决）/ rejected（已驳回）
+  await db.exec(`
+        CREATE TABLE IF NOT EXISTS user_reports (
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'feedback',
+            category TEXT,
+            targetId TEXT,
+            content TEXT NOT NULL,
+            contact TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        );
+    `);
+  await db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_user_reports_user ON user_reports(userId, createdAt);`
+  );
+  await db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_user_reports_status ON user_reports(status, createdAt);`
+  );
+
+  // ── 应用版本更新配置（UPD-001）────────────────────────
+  // 管理员配置各平台最新版本与外部下载源；GET /api/app/update 按 platform 返回 enabled 的最新一条
+  await db.exec(`
+        CREATE TABLE IF NOT EXISTS app_releases (
+            id TEXT PRIMARY KEY,
+            platform TEXT NOT NULL DEFAULT 'android',
+            version TEXT NOT NULL,
+            versionCode INTEGER NOT NULL DEFAULT 0,
+            downloadUrl TEXT NOT NULL,
+            releaseNotes TEXT,
+            forceUpdate INTEGER NOT NULL DEFAULT 0,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    `);
+  await db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_app_releases_platform
+         ON app_releases(platform, enabled, versionCode DESC);`
+  );
 }

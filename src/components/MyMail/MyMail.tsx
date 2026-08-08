@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import "../../styles/MyMail.css";
 import LoadingSpinner from "../ui/LoadingSpinner";
+import PlainTextEmail from "../ui/PlainTextEmail";
 import InlineScheduleApproval from "./InlineScheduleApproval";
 import InlineTodoApproval from "./InlineTodoApproval";
 
@@ -492,10 +493,12 @@ const MyMail: React.FC = () => {
                                         ),
                                     }}
                                 />
+                            ) : selectedEmail.body ? (
+                                <PlainTextEmail text={selectedEmail.body} />
                             ) : (
-                                <pre>
-                                    {selectedEmail.body || t("email.noBody")}
-                                </pre>
+                                <p className="mail-plain-empty">
+                                    {t("email.noBody")}
+                                </p>
                             )}
                         </div>
                     </>

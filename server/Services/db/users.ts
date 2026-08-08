@@ -152,6 +152,53 @@ export class UserStore {
         return users;
     }
 
+    /**
+     * SQL 层分页查询用户（用于管理后台列表）。
+     * 不再一次性加载全部用户及其所有日程（原 N+1 方式在用户量大时极慢，
+     * 导致翻页卡死）；taskCount 通过子查询统计。
+     * 返回的用户对象不含 tasks（以 taskCount 字段代替，可由调用方使用）。
+     */
+    async getUsersPage(opts: {
+        search?: string;
+        limit: number;
+        offset: number;
+    }): Promise<{ users: User[]; total: number }> {
+        const { search, limit, offset } = opts;
+        const where: string[] = [];
+        const params: unknown[] = [];
+        if (search && search.trim()) {
+            const q = `%${search.trim().toLowerCase()}%`;
+            where.push(
+                "(LOWER(email) LIKE ? OR LOWER(name) LIKE ? OR LOWER(id) LIKE ?)",
+            );
+            params.push(q, q, q);
+        }
+        const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
+
+        const countRow: any = await this.db.get(
+            `SELECT COUNT(*) AS c FROM users${whereSql}`,
+            params,
+        );
+        const total = Number(countRow?.c) || 0;
+
+        const rows: any[] = await this.db.all(
+            `SELECT u.*,
+                (SELECT COUNT(*) FROM tasks t WHERE t.userId = u.id) AS taskCount
+             FROM users u${whereSql}
+             ORDER BY u.createdAt DESC, u.id
+             LIMIT ? OFFSET ?`,
+            [...params, limit, offset],
+        );
+
+        const users = rows.map((row: any) => {
+            const user = this.mapRowToUser(row, []);
+            (user as User & { taskCount?: number }).taskCount =
+                Number(row.taskCount) || 0;
+            return user;
+        });
+        return { users, total };
+    }
+
     async updateUserHighEnergyPeriods(userId: string, periods: Record<number, any[]>): Promise<void> {
         await this.db.run("UPDATE users SET highEnergyPeriods = ? WHERE id = ?", [JSON.stringify(periods), userId]);
     }

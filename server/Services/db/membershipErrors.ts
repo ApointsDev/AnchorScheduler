@@ -65,3 +65,11 @@ export class MembershipInvalidArgumentError extends MembershipError {
     this.name = "MembershipInvalidArgumentError";
   }
 }
+
+/** 内测阶段：购买入口关闭，仅支持兑换码 */
+export class PurchaseDisabledError extends MembershipError {
+  constructor() {
+    super("Purchase is disabled during the beta phase");
+    this.name = "PurchaseDisabledError";
+  }
+}

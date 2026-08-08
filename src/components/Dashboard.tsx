@@ -30,6 +30,8 @@ import {
     setAutoSchedulePromotions as setAutoSchedulePromotionsApi,
     setStripReplyPrefix as setStripReplyPrefixApi,
     getUserSettings,
+    getMembership,
+    type MembershipSummary,
 } from "../services/api";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/Card";
 import { Button } from "./ui/Button";
@@ -155,6 +157,27 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
     >(null);
     const [showCalDavServerDetailModal, setShowCalDavServerDetailModal] =
         useState(false);
+
+    // 会员状态（设置内入口卡片展示）
+    const [membershipStatus, setMembershipStatus] =
+        useState<MembershipSummary | null>(null);
+    const membershipTierName = (id: string): string => {
+        if (id === "free") return t("membership.freeTier");
+        const label = t(`membership.tierNames.${id}`);
+        return label === `membership.tierNames.${id}` ? id : label;
+    };
+    const formatMembershipDate = (
+        iso: string | null | undefined,
+    ): string => {
+        if (!iso) return "-";
+        return new Date(iso).toLocaleDateString();
+    };
+
+    useEffect(() => {
+        getMembership()
+            .then(setMembershipStatus)
+            .catch(() => setMembershipStatus(null));
+    }, []);
 
     const copyCalDavServerField = (text: string, field: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -1016,7 +1039,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
         if (view === "mail") return <MyMail />;
         if (view === "membership") return <MembershipPage />;
 
-        // Default Dashboard View
+        // Default Dashboard View（设置页：我的计划为设置内的二级页面）
         return (
             <div className="settings-page">
                 <Card>
@@ -1044,6 +1067,51 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                             </span>
                             <Button variant="danger" onClick={handleLogout}>
                                 <LogOut size={18} /> {t("nav.logout")}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="membership-entry-card">
+                    <CardHeader>
+                        <CardTitle>{t("settings.membershipEntry")}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="membership-entry-body">
+                            <div className="membership-entry-info">
+                                <div className="membership-entry-badge">
+                                    <Crown size={18} />
+                                    <span>
+                                        {membershipStatus
+                                            ? membershipTierName(
+                                                  membershipStatus.effectiveTier,
+                                              )
+                                            : t("membership.freeTier")}
+                                    </span>
+                                </div>
+                                {membershipStatus?.isActive ? (
+                                    <div className="membership-entry-meta">
+                                        {t("membership.endDate")}:{" "}
+                                        {formatMembershipDate(
+                                            membershipStatus.effectiveEndDate,
+                                        )}
+                                        {" · "}
+                                        {membershipStatus.remainingDays}{" "}
+                                        {t("membership.days")}
+                                    </div>
+                                ) : (
+                                    <div className="membership-entry-meta">
+                                        {t("membership.noActive")}
+                                    </div>
+                                )}
+                            </div>
+                            <Button
+                                onClick={() =>
+                                    handleNavClick("/settings/membership")
+                                }
+                            >
+                                <Crown size={18} />
+                                {t("settings.membershipEntryCta")}
                             </Button>
                         </div>
                     </CardContent>
@@ -1378,18 +1446,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                 <FileText size={20} />
                 <span className="nav-text">{t("nav.systemLogs")}</span>
             </button>
-
-            {/* Membership Section */}
-            <div className="sidebar-section-header">
-                {t("nav.sectionMembership")}
-            </div>
-            <button
-                className={`nav-item ${view === "membership" ? "active" : ""}`}
-                onClick={() => handleNavClick("/membership")}
-            >
-                <Crown size={20} />
-                <span className="nav-text">{t("nav.membership")}</span>
-            </button>
         </>
     );
 
@@ -1442,7 +1498,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                         {renderNavItems()}
                         <div className="mobile-nav-footer">
                             <button
-                                className={`nav-item ${!view || view === "dashboard" ? "active" : ""}`}
+                                className={`nav-item ${!view || view === "dashboard" || view === "membership" ? "active" : ""}`}
                                 onClick={() => handleNavClick("/dashboard")}
                             >
                                 <LayoutDashboard size={20} />
@@ -1470,7 +1526,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                     <div className="sidebar-footer">
                         <ThemeSwitcher />
                         <button
-                            className="nav-item"
+                            className={`nav-item ${!view || view === "dashboard" || view === "membership" ? "active" : ""}`}
                             onClick={() => handleNavClick("/dashboard")}
                         >
                             <LayoutDashboard size={20} />

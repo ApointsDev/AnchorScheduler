@@ -36,8 +36,6 @@
         "myMail": "我的邮件",
         "aiAssistant": "AI 助手",
         "systemLogs": "系统日志",
-        "sectionMembership": "会员",
-        "membership": "会员中心",
         "dashboard": "仪表盘",
         "settings": "设置",
         "logout": "退出登录",
@@ -45,8 +43,14 @@
         "menu": "菜单"
     },
     "membership": {
+        "backToSettings": "返回设置",
         "currentStatus": "当前会员状态",
         "freeTier": "免费版",
+        "tierNames": {
+            "silver": "银锚会员",
+            "gold": "金锚会员",
+            "platinum": "铂金锚会员"
+        },
         "noActive": "暂无生效会员",
         "endDate": "到期时间",
         "remainingDays": "剩余天数",
@@ -64,6 +68,8 @@
         "plans": "会员套餐",
         "perMonth": "月",
         "buy": "立即开通",
+        "betaNotice": "内测阶段：购买暂未开放，请使用兑换码开通会员",
+        "betaUnavailable": "内测阶段暂不可用",
         "orders": "订单记录",
         "noOrders": "暂无订单",
         "orderTime": "下单时间",
@@ -99,6 +105,8 @@
         }
     },
     "settings": {
+        "membershipEntry": "我的计划",
+        "membershipEntryCta": "查看会员与兑换码",
         "language": "语言设置",
         "appearance": "外观设置",
         "darkMode": "深色模式",

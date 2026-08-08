@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
     Card,
@@ -18,6 +19,7 @@ import {
     RefreshCw,
     CalendarClock,
     Sparkles,
+    ArrowLeft,
     X,
 } from "lucide-react";
 import {
@@ -46,6 +48,7 @@ function formatDate(iso: string | null | undefined): string {
 }
 
 const MembershipPage: React.FC = () => {
+    const navigate = useNavigate();
     const { t, i18n } = useTranslation();
     const lang = i18n.language?.startsWith("en") ? "en" : "zh";
 
@@ -228,6 +231,17 @@ const MembershipPage: React.FC = () => {
 
     return (
         <div className="membership-page">
+            {/* 设置内二级页面：返回设置 */}
+            <div className="membership-page-header">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate("/dashboard")}
+                >
+                    <ArrowLeft size={16} />
+                    {t("membership.backToSettings")}
+                </Button>
+            </div>
             {error && (
                 <div className="error-message" style={{ marginBottom: 16 }}>
                     {error}
@@ -398,6 +412,12 @@ const MembershipPage: React.FC = () => {
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
+                    {plans && plans.purchaseEnabled === false && (
+                        <div className="membership-beta-notice">
+                            <Sparkles size={16} />
+                            {t("membership.betaNotice")}
+                        </div>
+                    )}
                     <div className="membership-plans-grid">
                         {plans?.plans.map((tier) => (
                             <div
@@ -434,9 +454,19 @@ const MembershipPage: React.FC = () => {
                                 </ul>
                                 <Button
                                     className="membership-plan-buy"
+                                    disabled={
+                                        plans?.purchaseEnabled === false
+                                    }
+                                    title={
+                                        plans?.purchaseEnabled === false
+                                            ? t("membership.betaNotice")
+                                            : undefined
+                                    }
                                     onClick={() => setPurchasingTier(tier)}
                                 >
-                                    {t("membership.buy")}
+                                    {plans?.purchaseEnabled === false
+                                        ? t("membership.betaUnavailable")
+                                        : t("membership.buy")}
                                 </Button>
                             </div>
                         ))}

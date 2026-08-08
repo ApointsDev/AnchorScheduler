@@ -75,6 +75,8 @@ export interface PlansResponse {
     plans: MembershipTier[];
     tiers: MembershipTier[];
     current: MembershipSummary;
+    /** 内测阶段购买开关（false 时购买不可用，仅兑换码） */
+    purchaseEnabled: boolean;
 }
 
 // ── API ───────────────────────────────────────────────────

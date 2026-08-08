@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "./Modal";
 import { Button } from "./Button";
+import PlainTextEmail from "./PlainTextEmail";
 import { getRawEmail, type RawEmail } from "../../services/api";
 
 interface EmailViewerProps {
@@ -155,20 +156,12 @@ const EmailViewer: React.FC<EmailViewerProps> = ({ emailId, emailMeta }) => {
                                         color: "#333",
                                     }}
                                 />
+                            ) : email.body ? (
+                                <PlainTextEmail text={email.body} />
                             ) : (
-                                <pre
-                                    style={{
-                                        whiteSpace: "pre-wrap",
-                                        wordBreak: "break-word",
-                                        fontFamily: "inherit",
-                                        fontSize: "0.9rem",
-                                        lineHeight: 1.6,
-                                        color: "#333",
-                                        margin: 0,
-                                    }}
-                                >
-                                    {email.body || t("email.noBody")}
-                                </pre>
+                                <p style={{ color: "#999" }}>
+                                    {t("email.noBody")}
+                                </p>
                             )
                         ) : (
                             <p style={{ color: "#999" }}>

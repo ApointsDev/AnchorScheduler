@@ -363,11 +363,13 @@ function buildInterceptScript(proxyPrefix: string, pfx: string): string {
   document.write = function(html) {
     if (typeof html === 'string') {
       // 重写 document.write 注入的 HTML 中的资源 URL
-      html = html.replace(/src=["'](\/[^"']*)["']/gi, function(m, path) {
+      // 注意：此代码位于外层模板字符串中，正则里的斜杠必须写成 \\/
+      // （模板字符串求值后得到 \/，正则字面量才合法），否则会报 Unterminated group
+      html = html.replace(/src=["'](\\\/[^"']*)["']/gi, function(m, path) {
         var proxied = tryProxy(path);
         return proxied ? 'src="' + proxied + '"' : m;
       });
-      html = html.replace(/href=["'](\/[^"']*)["']/gi, function(m, path) {
+      html = html.replace(/href=["'](\\\/[^"']*)["']/gi, function(m, path) {
         var proxied = tryProxy(path);
         return proxied ? 'href="' + proxied + '"' : m;
       });
@@ -379,11 +381,12 @@ function buildInterceptScript(proxyPrefix: string, pfx: string): string {
   var origInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
   Element.prototype.insertAdjacentHTML = function(position, html) {
     if (typeof html === 'string') {
-      html = html.replace(/src=["'](\/[^"']*)["']/gi, function(m, path) {
+      // 同 document.write：模板字符串内正则斜杠需写成 \\/
+      html = html.replace(/src=["'](\\\/[^"']*)["']/gi, function(m, path) {
         var proxied = tryProxy(path);
         return proxied ? 'src="' + proxied + '"' : m;
       });
-      html = html.replace(/href=["'](\/[^"']*)["']/gi, function(m, path) {
+      html = html.replace(/href=["'](\\\/[^"']*)["']/gi, function(m, path) {
         var proxied = tryProxy(path);
         return proxied ? 'href="' + proxied + '"' : m;
       });
@@ -422,10 +425,23 @@ function rewriteHtml(html: string, proxyPrefix: string, pfx: string): string {
     let result = html;
 
     // 先注入拦截脚本（所有业务JS之前），再注入检测脚本
-    result = result.replace(
-        /(<head[^>]*>)/i,
-        `$1${buildInterceptScript(proxyPrefix, pfx)}${DETECT_SCRIPT}`,
-    );
+    // 上游部分页面（如 UIM 的 esc-sso 登录页）没有 <head> 标签，
+    // HTML 直接以 <html lang="en"><title>...</title> 开头，
+    // 因此仅匹配 <head> 会导致拦截脚本完全注入失败，页面动态加载的
+    // 资源（如 /login/html-design-builtIn/*.js）不会被重写为代理路径，
+    // 请求落到本服务器返回 502，SDK 报错后页面显示 "system exception"。
+    // 兼容策略：
+    //   1) 有 <head>：注入到 <head> 内（业务 JS 之前）
+    //   2) 无 <head> 但有 <html>：注入到 <html> 标签之后
+    //   3) 都没有：注入到文档最开头
+    const intercept = `${buildInterceptScript(proxyPrefix, pfx)}${DETECT_SCRIPT}`;
+    if (/<head[^>]*>/i.test(result)) {
+        result = result.replace(/(<head[^>]*>)/i, `$1${intercept}`);
+    } else if (/<html[^>]*>/i.test(result)) {
+        result = result.replace(/(<html[^>]*>)/i, `$1${intercept}`);
+    } else {
+        result = `${intercept}${result}`;
+    }
 
     const otherDomains = Object.entries(DOMAINS).filter(([k]) => k !== pfx);
     for (const [otherPfx, base] of otherDomains) {
@@ -564,6 +580,26 @@ router.all("/proxy/*", async (req, res) => {
             return res.redirect(307, redirectUrl);
         }
         const { pfx, rest } = parsed;
+
+        // UIM 的 sso-mfa 行为分析（UEBA）上报接口：
+        // 该接口依赖 ngw 网关前端签名（KgdICDMu 查询参数），该签名由上游混淆 SDK
+        // 基于 uim 域环境生成，代理环境下无法生成，导致上游返回
+        // { code: "i18n.mfa.err.default.001", msg: "Failed: System Exception" }，
+        // SDK 会把该错误以弹窗形式展示，用户即看到 "system exception"。
+        // 该接口仅用于行为分析数据上报，与登录认证流程无关（上游直连时也返回
+        // { code: "0", msg: "SUCCESS" }），这里直接短路返回成功以消除错误弹窗。
+        if (pfx === "uim" && rest.startsWith("/sso-mfa/")) {
+            logger.info(
+                `Ebridge proxy: short-circuit sso-mfa endpoint ${req.method} ${req.path}`,
+            );
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            return res.status(200).json({
+                data: null,
+                code: "0",
+                msg: "SUCCESS",
+                timestamp: Date.now(),
+            });
+        }
 
         // 检查 rest 路径是否实际上属于另一个代理域
         const correctPfx = resolvePfxForRelativePath(rest, pfx);

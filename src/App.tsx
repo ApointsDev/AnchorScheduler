@@ -285,7 +285,7 @@ function App() {
                         />
 
                         <Route
-                            path="/membership"
+                            path="/settings/membership"
                             element={
                                 isAuth ? (
                                     <Dashboard

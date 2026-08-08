@@ -36,8 +36,6 @@
         "myMail": "My Mail",
         "aiAssistant": "AI Assistant",
         "systemLogs": "System Logs",
-        "sectionMembership": "Membership",
-        "membership": "Membership",
         "dashboard": "Dashboard",
         "settings": "Settings",
         "logout": "Logout",
@@ -45,8 +43,14 @@
         "menu": "Menu"
     },
     "membership": {
+        "backToSettings": "Back to Settings",
         "currentStatus": "Current Membership",
         "freeTier": "Free",
+        "tierNames": {
+            "silver": "Silver",
+            "gold": "Gold",
+            "platinum": "Platinum"
+        },
         "noActive": "No active membership",
         "endDate": "Expires",
         "remainingDays": "Days Left",
@@ -64,6 +68,8 @@
         "plans": "Plans",
         "perMonth": "month",
         "buy": "Subscribe",
+        "betaNotice": "Beta phase: purchases are not yet available, please use a redeem code",
+        "betaUnavailable": "Unavailable in beta",
         "orders": "Orders",
         "noOrders": "No orders yet",
         "orderTime": "Date",
@@ -99,6 +105,8 @@
         }
     },
     "settings": {
+        "membershipEntry": "My Plans",
+        "membershipEntryCta": "View membership & redeem codes",
         "language": "Language",
         "appearance": "Appearance",
         "darkMode": "Dark Mode",

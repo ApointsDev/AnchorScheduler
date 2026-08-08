@@ -91,7 +91,8 @@ function mapUserToRow(user: User): AdminUserRow {
         highEnergyPeriods: user.highEnergyPeriods || {},
         createdAt: (user as any).createdAt || null,
         updatedAt: (user as any).updatedAt || null,
-        taskCount: (user.tasks || []).length,
+        // SQL 层分页时以 taskCount 字段为准（users 不带 tasks 数组）
+        taskCount: (user as any).taskCount ?? (user.tasks || []).length,
     };
 }
 
@@ -134,23 +135,14 @@ export function createAdminRouter() {
             );
             const offset = (pageNum - 1) * limitNum;
 
-            let users = await dbService.getAllUsers();
+            // SQL 层分页（避免一次性加载全部用户与日程导致翻页卡死）
+            const { users, total } = await dbService.getUsersPage({
+                search: typeof search === "string" ? search : undefined,
+                limit: limitNum,
+                offset,
+            });
 
-            // 搜索过滤
-            if (search && typeof search === "string") {
-                const q = search.toLowerCase();
-                users = users.filter(
-                    (u) =>
-                        u.email.toLowerCase().includes(q) ||
-                        u.name.toLowerCase().includes(q) ||
-                        u.id.toLowerCase().includes(q),
-                );
-            }
-
-            const total = users.length;
-            const pagedUsers = users.slice(offset, offset + limitNum);
-
-            const rows = pagedUsers.map(mapUserToRow);
+            const rows = users.map(mapUserToRow);
 
             res.json({
                 users: rows,
@@ -459,6 +451,173 @@ export function createAdminRouter() {
             res.status(400).json({
                 error: "发放会员失败: " + (error.message || ""),
             });
+        }
+    });
+
+    // ── 用户反馈 / 举报管理（RPT-001）──────────────────────
+
+    // GET /api/admin/reports — 反馈/举报列表（分页 + 类型/状态筛选 + 搜索）
+    router.get("/reports", async (req: any, res: any) => {
+        try {
+            const {
+                page = "1",
+                limit = "20",
+                type,
+                status,
+                search,
+            } = req.query;
+            const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+            const limitNum = Math.min(
+                200,
+                Math.max(1, parseInt(limit as string, 10) || 20),
+            );
+
+            const result = await dbService.reports.list({
+                type: type ? String(type) : undefined,
+                status: status ? String(status) : undefined,
+                search: search ? String(search) : undefined,
+                limit: limitNum,
+                offset: (pageNum - 1) * limitNum,
+            });
+
+            // 附带用户邮箱/昵称，便于管理员查看
+            const enriched = await Promise.all(
+                result.reports.map(async (r: any) => {
+                    const u = await dbService.getUserById(r.userId);
+                    return {
+                        ...r,
+                        userEmail: u?.email || null,
+                        userName: u?.name || null,
+                    };
+                }),
+            );
+
+            res.json({
+                reports: enriched,
+                total: result.total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(result.total / limitNum),
+            });
+        } catch (error: any) {
+            logger.error("Admin list reports error:", error);
+            res.status(500).json({ error: "获取反馈列表失败" });
+        }
+    });
+
+    // PATCH /api/admin/reports/:id — 更新处理状态
+    // body: { status: "pending"|"processing"|"resolved"|"rejected" }
+    router.patch("/reports/:id", async (req: any, res: any) => {
+        try {
+            const { status } = req.body || {};
+            const report = await dbService.reports.getById(req.params.id);
+            if (!report) {
+                return res.status(404).json({ error: "记录不存在" });
+            }
+            const updated = await dbService.reports.updateStatus(
+                req.params.id,
+                status,
+            );
+            logger.info(
+                `Admin: report ${req.params.id} status -> ${status} by ${(req.user as any)?.email}`,
+            );
+            res.json({ report: updated });
+        } catch (error: any) {
+            logger.error("Admin update report status error:", error);
+            res.status(400).json({
+                error: "更新状态失败: " + (error.message || ""),
+            });
+        }
+    });
+
+    // DELETE /api/admin/reports/:id — 删除反馈/举报
+    router.delete("/reports/:id", async (req: any, res: any) => {
+        try {
+            const ok = await dbService.reports.delete(req.params.id);
+            if (!ok) {
+                return res.status(404).json({ error: "记录不存在" });
+            }
+            res.json({ message: "已删除", id: req.params.id });
+        } catch (error: any) {
+            logger.error("Admin delete report error:", error);
+            res.status(500).json({ error: "删除失败" });
+        }
+    });
+
+    // ── 应用版本更新配置（UPD-001）────────────────────────
+
+    // GET /api/admin/app-update — 版本发布配置列表
+    router.get("/app-update", async (_req: any, res: any) => {
+        try {
+            const releases = await dbService.appUpdate.list();
+            res.json({ releases });
+        } catch (error: any) {
+            logger.error("Admin list app-update error:", error);
+            res.status(500).json({ error: "获取版本配置失败" });
+        }
+    });
+
+    // POST /api/admin/app-update — 新增 / 更新版本发布配置
+    // body: { id?, platform, version, versionCode?, downloadUrl, releaseNotes?, forceUpdate?, enabled? }
+    router.post("/app-update", async (req: any, res: any) => {
+        try {
+            const b = req.body || {};
+            if (!b.version || !b.downloadUrl || !b.platform) {
+                return res
+                    .status(400)
+                    .json({ error: "platform / version / downloadUrl 为必填项" });
+            }
+            const release = await dbService.appUpdate.upsert({
+                id: b.id || undefined,
+                platform: String(b.platform),
+                version: String(b.version),
+                versionCode: b.versionCode != null ? Number(b.versionCode) : 0,
+                downloadUrl: String(b.downloadUrl),
+                releaseNotes: b.releaseNotes || null,
+                forceUpdate: !!b.forceUpdate,
+                enabled: b.enabled !== false,
+            });
+            logger.info(
+                `Admin: ${b.id ? "updated" : "created"} app release ${release.platform}@${release.version} by ${(req.user as any)?.email}`,
+            );
+            res.json({ release });
+        } catch (error: any) {
+            logger.error("Admin save app-update error:", error);
+            res.status(500).json({
+                error: "保存版本配置失败: " + (error.message || ""),
+            });
+        }
+    });
+
+    // PATCH /api/admin/app-update/:id/enabled — 启用 / 停用
+    router.patch("/app-update/:id/enabled", async (req: any, res: any) => {
+        try {
+            const { enabled } = req.body || {};
+            const release = await dbService.appUpdate.setEnabled(
+                req.params.id,
+                !!enabled,
+            );
+            if (!release) {
+                return res.status(404).json({ error: "版本配置不存在" });
+            }
+            res.json({ release });
+        } catch (error: any) {
+            logger.error("Admin set app-update enabled error:", error);
+            res.status(500).json({ error: "更新失败" });
+        }
+    });
+
+    // DELETE /api/admin/app-update/:id — 删除版本配置
+    router.delete("/app-update/:id", async (req: any, res: any) => {
+        try {
+            const ok = await dbService.appUpdate.delete(req.params.id);
+            if (!ok) {
+                return res.status(404).json({ error: "版本配置不存在" });
+            }
+            res.json({ message: "已删除", id: req.params.id });
+        } catch (error: any) {
+            logger.error("Admin delete app-update error:", error);
+            res.status(500).json({ error: "删除失败" });
         }
     });
 
