@@ -16,6 +16,7 @@ import {
     type AdminUserRow,
     type AdminUserSchedule,
 } from "../../services/adminApi";
+import RedeemCodePanel from "./RedeemCodePanel";
 import logo from "../../assets/logo.svg";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import "../../styles/Admin.css";
@@ -697,6 +698,8 @@ function DeleteConfirmModal({
 
 export default function AdminPanel() {
     const { t } = useTranslation();
+    // 标签页：users（用户管理） / redeem（兑换码）
+    const [activeTab, setActiveTab] = useState<"users" | "redeem">("users");
     const [fieldMeta, setFieldMeta] = useState<Record<string, AdminFieldMeta>>(
         {},
     );
@@ -804,36 +807,59 @@ export default function AdminPanel() {
                             verticalAlign: "middle",
                         }}
                     />
-                    {t("admin.userManagement")}
+                    {activeTab === "redeem"
+                        ? t("admin.redeemCodeManagement")
+                        : t("admin.userManagement")}
                 </h1>
-                <div className="admin-toolbar">
-                    <input
-                        className="admin-search"
-                        type="text"
-                        placeholder={t("admin.searchUser")}
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                    />
-                    <button
-                        className="admin-btn admin-btn-primary"
-                        onClick={handleSearch}
-                    >
-                        {t("common.search")}
-                    </button>
-                    <button className="admin-btn" onClick={handleRefresh}>
-                        {t("common.refresh")}
-                    </button>
-                    <button
-                        className="admin-btn admin-btn-success"
-                        onClick={() => setShowCreateModal(true)}
-                    >
-                        ＋ {t("admin.addUser")}
-                    </button>
-                </div>
+                {activeTab === "users" && (
+                    <div className="admin-toolbar">
+                        <input
+                            className="admin-search"
+                            type="text"
+                            placeholder={t("admin.searchUser")}
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                        />
+                        <button
+                            className="admin-btn admin-btn-primary"
+                            onClick={handleSearch}
+                        >
+                            {t("common.search")}
+                        </button>
+                        <button className="admin-btn" onClick={handleRefresh}>
+                            {t("common.refresh")}
+                        </button>
+                        <button
+                            className="admin-btn admin-btn-success"
+                            onClick={() => setShowCreateModal(true)}
+                        >
+                            ＋ {t("admin.addUser")}
+                        </button>
+                    </div>
+                )}
             </div>
 
-            {error && <div className="admin-error">{error}</div>}
+            <div className="admin-tabs">
+                <button
+                    className={`admin-tab ${activeTab === "users" ? "active" : ""}`}
+                    onClick={() => setActiveTab("users")}
+                >
+                    {t("admin.userManagement")}
+                </button>
+                <button
+                    className={`admin-tab ${activeTab === "redeem" ? "active" : ""}`}
+                    onClick={() => setActiveTab("redeem")}
+                >
+                    {t("admin.redeemCodeManagement")}
+                </button>
+            </div>
+
+            {activeTab === "redeem" ? (
+                <RedeemCodePanel />
+            ) : (
+                <>
+                    {error && <div className="admin-error">{error}</div>}
 
             {loading ? (
                 <LoadingSpinner />
@@ -960,6 +986,8 @@ export default function AdminPanel() {
                     onClose={() => setDeleteUser(null)}
                     onConfirm={() => handleDeleteUser(deleteUser.id)}
                 />
+            )}
+                </>
             )}
         </div>
     );

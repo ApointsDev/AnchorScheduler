@@ -7,13 +7,10 @@ import {
     disableCalDavServer,
     startMicrosoftAuth,
     startExchangeAuth,
-    saveEbridgeTimetableUrl,
     getMicrosoftTodoStatus,
-    getEbridgeStatus,
     type CalDavServerStatus,
     type CalDavServerEnableResult,
     type MicrosoftTodoStatus,
-    type EbridgeStatus,
 } from "../services/api";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/Card";
 import { Button } from "./ui/Button";
@@ -26,8 +23,6 @@ import {
     GraduationCap,
     Bot,
     CheckCircle,
-    Link2,
-    Building2,
     RefreshCw,
     Zap,
     ExternalLink,
@@ -55,12 +50,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     // Step 2 binding state
     const [msTodoStatus, setMsTodoStatus] =
         useState<MicrosoftTodoStatus | null>(null);
-    const [ebridgeStatus, setEbridgeStatus] = useState<EbridgeStatus | null>(
-        null,
-    );
     const [bindingLoading, setBindingLoading] = useState<string | null>(null);
-    const [ebridgeUrl, setEbridgeUrl] = useState("");
-    const [showEbridgeInput, setShowEbridgeInput] = useState(false);
     const [bindError, setBindError] = useState("");
 
     useEffect(() => {
@@ -70,12 +60,8 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
     const loadServiceStatus = async () => {
         try {
-            const [msStatus, ebStatus] = await Promise.all([
-                getMicrosoftTodoStatus(),
-                getEbridgeStatus(),
-            ]);
+            const msStatus = await getMicrosoftTodoStatus();
             setMsTodoStatus(msStatus);
-            setEbridgeStatus(ebStatus);
         } catch {
             // silently fail
         }
@@ -161,27 +147,6 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             await startExchangeAuth();
         } catch {
             setBindError("Exchange 绑定失败，请稍后重试");
-        } finally {
-            setBindingLoading(null);
-        }
-    };
-
-    const handleBindEbridge = async () => {
-        if (!ebridgeUrl.trim()) {
-            setBindError("请输入 eBridge 课程表链接");
-            return;
-        }
-        setBindingLoading("ebridge");
-        setBindError("");
-        try {
-            await saveEbridgeTimetableUrl(ebridgeUrl.trim());
-            setEbridgeStatus((prev) =>
-                prev ? { ...prev, connected: true, binded: true } : null,
-            );
-            setShowEbridgeInput(false);
-            setEbridgeUrl("");
-        } catch (err: any) {
-            setBindError(err.message || "Ebridge 绑定失败");
         } finally {
             setBindingLoading(null);
         }
@@ -355,91 +320,6 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                                 )}
                             </Button>
                         </div>
-
-                        {/* Ebridge */}
-                        <div className="bind-item">
-                            <div className="bind-icon">
-                                <Building2 size={22} />
-                            </div>
-                            <div className="bind-info">
-                                <strong>
-                                    {t("onboarding.bindEbridgeTitle")}
-                                </strong>
-                                <p>{t("onboarding.bindEbridgeDesc")}</p>
-                            </div>
-                            {ebridgeStatus?.binded ? (
-                                <span className="bind-status-bound">
-                                    {t("common.bound")}
-                                </span>
-                            ) : !showEbridgeInput ? (
-                                <Button
-                                    onClick={() => setShowEbridgeInput(true)}
-                                    variant="outline"
-                                    size="sm"
-                                >
-                                    <Link2 size={14} />{" "}
-                                    {t("onboarding.configureLink")}
-                                </Button>
-                            ) : null}
-                        </div>
-
-                        {/* Ebridge URL input */}
-                        {showEbridgeInput && !ebridgeStatus?.binded && (
-                            <div className="bind-ebridge-input">
-                                <input
-                                    type="text"
-                                    placeholder={t(
-                                        "onboarding.ebridgePlaceholder",
-                                    )}
-                                    value={ebridgeUrl}
-                                    onChange={(e) =>
-                                        setEbridgeUrl(e.target.value)
-                                    }
-                                    className="ebridge-url-input"
-                                />
-                                <div className="ebridge-input-actions">
-                                    <Button
-                                        onClick={handleBindEbridge}
-                                        disabled={
-                                            bindingLoading === "ebridge" ||
-                                            !ebridgeUrl.trim()
-                                        }
-                                        variant="primary"
-                                        size="sm"
-                                    >
-                                        {bindingLoading === "ebridge" ? (
-                                            <>
-                                                <Loader2
-                                                    size={14}
-                                                    className="animate-spin"
-                                                />{" "}
-                                                {t("common.saving")}
-                                            </>
-                                        ) : (
-                                            t("common.save")
-                                        )}
-                                    </Button>
-                                    <Button
-                                        onClick={() => {
-                                            setShowEbridgeInput(false);
-                                            setEbridgeUrl("");
-                                        }}
-                                        variant="secondary"
-                                        size="sm"
-                                    >
-                                        {t("common.cancel")}
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-
-                        {ebridgeStatus?.binded && (
-                            <div className="bind-ebridge-input">
-                                <p className="ebridge-bound-note">
-                                    {t("onboarding.ebridgeBoundNote")}
-                                </p>
-                            </div>
-                        )}
                     </div>
                 </CardContent>
             </Card>

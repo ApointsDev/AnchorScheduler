@@ -64,6 +64,25 @@ export const saveEbridgeTimetableUrl = async (
     }
 };
 
+// 直接导入 eBridge 课程表哈希（无需账号密码）
+export const importEbridgeTimetableHash = async (
+    timetableHash: string,
+): Promise<void> => {
+    const response = await customFetch(`${API_BASE_URL}/api/ebridge/save-url`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ timetableHash }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "导入课程表哈希失败");
+    }
+};
+
 // 查询Microsoft Todo状态接口
 export interface MicrosoftTodoStatus {
     connected: boolean;

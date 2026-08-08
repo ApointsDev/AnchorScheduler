@@ -90,6 +90,7 @@ export {
     bindSmtp,
     unbindSmtp,
     saveEbridgeTimetableUrl,
+    importEbridgeTimetableHash,
     getMicrosoftTodoStatus,
     getEbridgeStatus,
     syncTimetable,
@@ -168,3 +169,21 @@ export type {
     RedeemResult,
     PlansResponse,
 } from "./membership";
+
+// ── 用户反馈 / 举报（RPT-001）──────────────────────────
+export { submitReport, getMyReports } from "./reports";
+export type {
+    ReportType,
+    ReportStatus,
+    UserReport,
+    SubmitReportInput,
+    MyReportsResponse,
+} from "./reports";
+
+// ── 应用版本更新检查（UPD-001）─────────────────────────
+export { checkAppUpdate } from "./appUpdate";
+export type {
+    AppPlatform,
+    AppReleaseInfo,
+    AppUpdateCheckResult,
+} from "./appUpdate";

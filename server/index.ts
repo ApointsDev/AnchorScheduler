@@ -427,21 +427,47 @@ app.use("/api/speech", initializeSpeechRoutes(authenticateToken));
 // Ebridge 路由
 app.use("/api/ebridge", ebridgeRoutes);
 
-// Ebridge 保存课表 URL
+// Ebridge 保存课表 URL / 直接导入课表哈希
+// 支持两种入参：
+//   - timetableUrl ：完整的 http(s) 课表链接（原有行为，弹窗登录后自动回传）
+//   - timetableHash ：裸的课表哈希（新增，用户可直接粘贴哈希导入，
+//     服务端构造成完整 URL，哈希位于第 6 段，与 timetable.ts 的 split('/')[5] 提取逻辑一致）
 app.post(
     "/api/ebridge/save-url",
     authenticateToken,
     async (req: any, res: any) => {
         const user = req.user as User;
-        const { timetableUrl } = req.body || {};
-        if (
-            !timetableUrl ||
-            typeof timetableUrl !== "string" ||
-            !timetableUrl.startsWith("http")
-        ) {
-            return res.status(400).json({ error: "Invalid timetable URL" });
+        const { timetableUrl, timetableHash } = req.body || {};
+
+        let finalUrl: unknown = timetableUrl;
+        if (typeof finalUrl !== "string" || !finalUrl.trim()) {
+            finalUrl = timetableHash;
         }
-        user.timetableUrl = timetableUrl;
+        if (typeof finalUrl === "string") {
+            finalUrl = finalUrl.trim();
+        }
+
+        // 非 http(s) 输入视为裸哈希 → 构造成完整课表 URL
+        if (
+            typeof finalUrl === "string" &&
+            finalUrl &&
+            !/^https?:\/\//i.test(finalUrl)
+        ) {
+            const hash = finalUrl.split(/[/?#\s]/)[0];
+            if (hash) {
+                finalUrl = `https://ebridge.xjtlu.edu.cn/ebridge/timetable/${hash}`;
+            }
+        }
+
+        if (
+            typeof finalUrl !== "string" ||
+            !finalUrl.startsWith("http")
+        ) {
+            return res
+                .status(400)
+                .json({ error: "Invalid timetable URL or hash" });
+        }
+        user.timetableUrl = finalUrl;
         user.ebridgeBinded = true;
         await dbService.updateUser(user);
         userCache.set(user.id, user);

@@ -11,6 +11,7 @@ import {
     removeToken,
     getToken,
     saveEbridgeTimetableUrl,
+    importEbridgeTimetableHash,
     getMicrosoftTodoStatus,
     getEbridgeStatus,
     syncTimetable,
@@ -129,6 +130,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
     );
     const [ebridgePopup, setEbridgePopup] = useState<Window | null>(null);
     const [ebridgePopupError, setEbridgePopupError] = useState("");
+    const [showEbridgeHashModal, setShowEbridgeHashModal] = useState(false);
+    const [ebridgeHash, setEbridgeHash] = useState("");
+    const [ebridgeHashLoading, setEbridgeHashLoading] = useState(false);
 
     // CalDAV state
     const [calDavStatus, setCalDavStatus] = useState<CalDavStatus | null>(null);
@@ -198,6 +202,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
             return;
         }
         setEbridgePopup(popup);
+    };
+
+    const handleImportEbridgeHash = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const hash = ebridgeHash.trim();
+        if (!hash) return;
+        setEbridgeHashLoading(true);
+        setStatusError("");
+        try {
+            await importEbridgeTimetableHash(hash);
+            setShowEbridgeHashModal(false);
+            setEbridgeHash("");
+            setMessage(t("settings.timetableHashImported"));
+            setTimeout(() => setMessage(""), 2000);
+            handleRefreshStatus();
+        } catch (err: any) {
+            setStatusError(err.message || t("settings.saveFailed"));
+        } finally {
+            setEbridgeHashLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -882,13 +906,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                             </div>
                             <div className="conn-actions">
                                 {!ebridgeStatus?.connected && (
-                                    <Button
-                                        onClick={openEbridgePopup}
-                                        variant="primary"
-                                        size="sm"
-                                    >
-                                        {t("common.connect")}
-                                    </Button>
+                                    <>
+                                        <Button
+                                            onClick={openEbridgePopup}
+                                            variant="primary"
+                                            size="sm"
+                                        >
+                                            {t("common.connect")}
+                                        </Button>
+                                        <Button
+                                            onClick={() =>
+                                                setShowEbridgeHashModal(true)
+                                            }
+                                            variant="outline"
+                                            size="sm"
+                                        >
+                                            {t("settings.importTimetableHash")}
+                                        </Button>
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -2084,6 +2119,66 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                             copiedField={calDavServerCopiedField}
                             onCopy={copyCalDavServerField}
                         />
+                    </div>
+                </Modal>
+
+                <Modal
+                    isOpen={showEbridgeHashModal}
+                    onClose={() => setShowEbridgeHashModal(false)}
+                    title={t("settings.importTimetableHash")}
+                >
+                    <div className="ebridge-hash-modal">
+                        <p
+                            className="modal-description"
+                            style={{
+                                marginBottom: "15px",
+                                color: "var(--color-text-secondary)",
+                                fontSize: "14px",
+                            }}
+                        >
+                            {t("settings.importTimetableHashDesc")}
+                        </p>
+                        <form onSubmit={handleImportEbridgeHash}>
+                            <Input
+                                label={t("settings.timetableHash")}
+                                type="text"
+                                id="ebridgeHash"
+                                value={ebridgeHash}
+                                onChange={(e) =>
+                                    setEbridgeHash(e.target.value)
+                                }
+                                required
+                                placeholder={t(
+                                    "settings.timetableHashPlaceholder",
+                                )}
+                            />
+                            <div
+                                style={{
+                                    marginTop: "20px",
+                                    display: "flex",
+                                    justifyContent: "flex-end",
+                                    gap: "10px",
+                                }}
+                            >
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={() =>
+                                        setShowEbridgeHashModal(false)
+                                    }
+                                >
+                                    {t("common.cancel")}
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={ebridgeHashLoading}
+                                >
+                                    {ebridgeHashLoading
+                                        ? t("common.saving")
+                                        : t("common.save")}
+                                </Button>
+                            </div>
+                        </form>
                     </div>
                 </Modal>
                 <ShareModal

@@ -227,3 +227,272 @@ export const getAdminUserSchedule = async (
     }
     return response.json();
 };
+
+// ── 用户反馈 / 举报管理（RPT-001）──────────────────────────
+
+export type ReportType = "feedback" | "report";
+export type ReportStatus = "pending" | "processing" | "resolved" | "rejected";
+
+export interface AdminReportRow {
+    id: string;
+    userId: string;
+    userEmail: string | null;
+    userName: string | null;
+    type: ReportType;
+    category: string | null;
+    targetId: string | null;
+    content: string;
+    contact: string | null;
+    status: ReportStatus;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface AdminReportsResponse {
+    reports: AdminReportRow[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+}
+
+export const getAdminReports = async (opts?: {
+    page?: number;
+    limit?: number;
+    type?: ReportType;
+    status?: ReportStatus;
+    search?: string;
+}): Promise<AdminReportsResponse> => {
+    const params = new URLSearchParams();
+    if (opts?.page) params.set("page", String(opts.page));
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    if (opts?.type) params.set("type", opts.type);
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.search) params.set("search", opts.search);
+
+    const response = await customFetch(
+        "/api/admin/reports?" + params.toString(),
+        {
+            method: "GET",
+            headers: { Authorization: `Bearer ${getToken()}` },
+        },
+    );
+    if (!response.ok) {
+        const error = await response
+            .json()
+            .catch(() => ({ error: "请求失败" }));
+        throw new Error(error.error || "获取反馈列表失败");
+    }
+    return response.json();
+};
+
+export const updateAdminReportStatus = async (
+    id: string,
+    status: ReportStatus,
+): Promise<{ report: AdminReportRow }> => {
+    const response = await customFetch(`/api/admin/reports/${id}`, {
+        method: "PATCH",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ status }),
+    });
+    if (!response.ok) {
+        const error = await response
+            .json()
+            .catch(() => ({ error: "请求失败" }));
+        throw new Error(error.error || "更新状态失败");
+    }
+    return response.json();
+};
+
+export const deleteAdminReport = async (id: string): Promise<void> => {
+    const response = await customFetch(`/api/admin/reports/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!response.ok) {
+        const error = await response
+            .json()
+            .catch(() => ({ error: "请求失败" }));
+        throw new Error(error.error || "删除失败");
+    }
+};
+
+// ── 应用版本更新配置（UPD-001）──────────────────────────
+
+export type AppPlatform = "android" | "ios" | "web" | "all";
+
+export interface AdminAppRelease {
+    id: string;
+    platform: AppPlatform;
+    version: string;
+    versionCode: number;
+    downloadUrl: string;
+    releaseNotes: string | null;
+    forceUpdate: boolean;
+    enabled: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface AdminAppReleaseInput {
+    id?: string;
+    platform: AppPlatform;
+    version: string;
+    versionCode?: number;
+    downloadUrl: string;
+    releaseNotes?: string | null;
+    forceUpdate?: boolean;
+    enabled?: boolean;
+}
+
+export const getAdminAppReleases = async (): Promise<{
+    releases: AdminAppRelease[];
+}> => {
+    const response = await customFetch("/api/admin/app-update", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!response.ok) {
+        const error = await response
+            .json()
+            .catch(() => ({ error: "请求失败" }));
+        throw new Error(error.error || "获取版本配置失败");
+    }
+    return response.json();
+};
+
+export const saveAdminAppRelease = async (
+    input: AdminAppReleaseInput,
+): Promise<{ release: AdminAppRelease }> => {
+    const response = await customFetch("/api/admin/app-update", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+        const error = await response
+            .json()
+            .catch(() => ({ error: "请求失败" }));
+        throw new Error(error.error || "保存版本配置失败");
+    }
+    return response.json();
+};
+
+export const setAdminAppReleaseEnabled = async (
+    id: string,
+    enabled: boolean,
+): Promise<{ release: AdminAppRelease }> => {
+    const response = await customFetch(`/api/admin/app-update/${id}/enabled`, {
+        method: "PATCH",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ enabled }),
+    });
+    if (!response.ok) {
+        const error = await response
+            .json()
+            .catch(() => ({ error: "请求失败" }));
+        throw new Error(error.error || "更新失败");
+    }
+    return response.json();
+};
+
+export const deleteAdminAppRelease = async (id: string): Promise<void> => {
+    const response = await customFetch(`/api/admin/app-update/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!response.ok) {
+        const error = await response
+            .json()
+            .catch(() => ({ error: "请求失败" }));
+        throw new Error(error.error || "删除失败");
+    }
+};
+
+// ── 会员与兑换码（管理端，MENU-001）──────────────────────────
+
+export interface AdminRedeemCode {
+    code: string;
+    tier: string;
+    days: number;
+    maxUses: number | null;
+    usedCount: number;
+    expiresAt: string | null;
+    active: boolean;
+    createdAt: string;
+    createdBy?: string | null;
+}
+
+/** 兑换码列表 */
+export const listAdminRedeemCodes = async (): Promise<AdminRedeemCode[]> => {
+    const response = await customFetch("/api/admin/membership/redeem-codes", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!response.ok) {
+        const error = await response
+            .json()
+            .catch(() => ({ error: "请求失败" }));
+        throw new Error(error.error || "获取兑换码列表失败");
+    }
+    const data = await response.json();
+    return data.codes || [];
+};
+
+/** 批量生成兑换码 */
+export const createAdminRedeemCodes = async (params: {
+    tier: string;
+    days: number;
+    count?: number;
+    maxUses?: number;
+    expiresAt?: string | null;
+}): Promise<AdminRedeemCode[]> => {
+    const response = await customFetch("/api/admin/membership/redeem-codes", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify(params),
+    });
+    if (!response.ok) {
+        const error = await response
+            .json()
+            .catch(() => ({ error: "请求失败" }));
+        throw new Error(error.error || "生成兑换码失败");
+    }
+    const data = await response.json();
+    return data.codes || [];
+};
+
+/** 直接为用户发放会员权益（按 userId） */
+export const grantAdminMembership = async (params: {
+    userId: string;
+    tier: string;
+    days: number;
+}): Promise<{ grant: unknown; membership: unknown }> => {
+    const response = await customFetch("/api/admin/membership/grant", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify(params),
+    });
+    if (!response.ok) {
+        const error = await response
+            .json()
+            .catch(() => ({ error: "请求失败" }));
+        throw new Error(error.error || "发放会员失败");
+    }
+    return response.json();
+};
