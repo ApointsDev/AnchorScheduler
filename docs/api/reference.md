@@ -129,6 +129,44 @@ interface RejectionBufferItem {
 }
 ```
 
+### UserReport（用户反馈 / 举报）
+
+> 用户提交的反馈或举报，管理员在后台处理。详见 [reports.md](reports.md)。
+
+```typescript
+interface UserReport {
+    id: string;
+    userId: string;
+    type: "feedback" | "report";
+    category: string | null;
+    targetId: string | null;      // 举报对象 ID（反馈为空）
+    content: string;
+    contact: string | null;
+    status: "pending" | "processing" | "resolved" | "rejected";
+    createdAt: string;
+    updatedAt: string;
+}
+```
+
+### AppRelease（应用版本发布配置）
+
+> 管理员配置的各平台版本与外部下载源。详见 [app-update.md](app-update.md)。
+
+```typescript
+interface AppRelease {
+    id: string;
+    platform: "android" | "ios" | "web" | "all";
+    version: string;
+    versionCode: number;
+    downloadUrl: string;          // 外部下载源
+    releaseNotes: string | null;
+    forceUpdate: boolean;
+    enabled: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+```
+
 ### Tag（标签）
 ```typescript
 interface Tag {

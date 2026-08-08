@@ -83,6 +83,77 @@ export const importEbridgeTimetableHash = async (
     }
 };
 
+// ── Exchange 邮箱转发绑定（引导式）──────────────────────────
+// 学校更改权限后原 OAuth 绑定已废弃；改为引导用户配置
+// XJTLU 邮箱 → @apoints.email 的转发，系统发送测试邮件确认绑定。
+
+export interface ExchangeForwardStartResult {
+    sent: boolean;
+    code: string;
+    forwardTarget: string;
+}
+
+// 发送测试邮件并开启待验证状态
+export const startExchangeForward = async (
+    xjtluEmail: string,
+): Promise<ExchangeForwardStartResult> => {
+    const response = await customFetch(
+        `${API_BASE_URL}/api/exchange-forward/start`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${getToken()}`,
+            },
+            body: JSON.stringify({ xjtluEmail }),
+        },
+    );
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "发送测试邮件失败");
+    }
+
+    return response.json();
+};
+
+// 检查绑定状态（检索被转发的测试邮件）
+export const checkExchangeForward = async (): Promise<{
+    confirmed: boolean;
+    email?: string;
+}> => {
+    const response = await customFetch(
+        `${API_BASE_URL}/api/exchange-forward/check`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${getToken()}`,
+            },
+            body: JSON.stringify({}),
+        },
+    );
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "检查绑定状态失败");
+    }
+
+    return response.json();
+};
+
+// 取消待验证状态
+export const cancelExchangeForward = async (): Promise<void> => {
+    await customFetch(`${API_BASE_URL}/api/exchange-forward/cancel`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({}),
+    });
+};
+
 // 查询Microsoft Todo状态接口
 export interface MicrosoftTodoStatus {
     connected: boolean;

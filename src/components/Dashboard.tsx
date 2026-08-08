@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { getBreakpoint, isBelow } from "../utils/breakpoints";
 import {
     startMicrosoftAuth,
-    startExchangeAuth,
     unbindExchange,
     bindSmtp,
     unbindSmtp,
@@ -12,6 +11,9 @@ import {
     getToken,
     saveEbridgeTimetableUrl,
     importEbridgeTimetableHash,
+    startExchangeForward,
+    checkExchangeForward,
+    cancelExchangeForward,
     getMicrosoftTodoStatus,
     getEbridgeStatus,
     syncTimetable,
@@ -50,6 +52,7 @@ import MyMail from "./MyMail/MyMail";
 import ShareModal from "./Share/ShareModal";
 import LoadingSpinner from "./ui/LoadingSpinner";
 import MembershipPage from "./Membership/MembershipPage";
+import FeedbackModal from "./FeedbackModal";
 import { MobileActionBarProvider } from "./ui/MobileActionBar";
 import { useWeek } from "../context/WeekContext";
 import { useTheme } from "../utils/useTheme";
@@ -73,6 +76,9 @@ import {
     Mail,
     Share2,
     Crown,
+    Loader2,
+    CheckCircle2,
+    ArrowRight,
 } from "lucide-react";
 import ThemeSwitcher from "./ThemeSwitcher";
 import "../styles/Dashboard.css";
@@ -109,6 +115,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
     const [statusLoading, setStatusLoading] = useState(true);
     const [statusError, setStatusError] = useState("");
     const [tokenCopied, setTokenCopied] = useState(false);
+    const [userId, setUserId] = useState("");
+    const [idCopied, setIdCopied] = useState(false);
     const [showUnboundModal, setShowUnboundModal] = useState(false);
     const [syncLoading, setSyncLoading] = useState(false);
     const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
@@ -123,11 +131,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
     const [weekLoading, setWeekLoading] = useState(false);
     const [weekError, setWeekError] = useState("");
     const [showWeekModal, setShowWeekModal] = useState(false);
-    const [showExchangeConnectModal, setShowExchangeConnectModal] =
+    // Exchange 邮箱转发绑定（引导式，替代已废弃的 OAuth 绑定）
+    const [showExchangeForwardModal, setShowExchangeForwardModal] =
         useState(false);
-    const [exchangeEmail, setExchangeEmail] = useState(
-        localStorage.getItem("user_XJTLUaccount") || "",
-    );
+    const [exchangeForwardEmail, setExchangeForwardEmail] = useState("");
+    const [exchangeForwardStep, setExchangeForwardStep] = useState(1);
+    const [exchangeForwardCode, setExchangeForwardCode] = useState("");
+    const [exchangeForwardTarget, setExchangeForwardTarget] = useState("");
+    const [exchangeForwardLoading, setExchangeForwardLoading] =
+        useState(false);
+    const [exchangeForwardError, setExchangeForwardError] = useState("");
+    const [exchangeForwardConfirmed, setExchangeForwardConfirmed] =
+        useState(false);
     const [ebridgePopup, setEbridgePopup] = useState<Window | null>(null);
     const [ebridgePopupError, setEbridgePopupError] = useState("");
     const [showEbridgeHashModal, setShowEbridgeHashModal] = useState(false);
@@ -165,6 +180,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
     // 会员状态（设置内入口卡片展示）
     const [membershipStatus, setMembershipStatus] =
         useState<MembershipSummary | null>(null);
+
+    // 反馈 / 举报模态框
+    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
     const membershipTierName = (id: string): string => {
         if (id === "free") return t("membership.freeTier");
         const label = t(`membership.tierNames.${id}`);
@@ -312,6 +330,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                         "stripReplyPrefix",
                         String(userSettings.stripReplyPrefix),
                     );
+                    setUserId(userSettings.id || "");
                 }
 
                 // 如果有未绑定的账号，显示弹窗
@@ -347,31 +366,72 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
         startMicrosoftAuth();
     };
 
-    const handleConnectExchange = async () => {
-        // 允许用户输入/确认学校邮箱
-        setExchangeEmail(XJTLUaccount || "");
-        setShowExchangeConnectModal(true);
+    // Exchange 邮箱绑定：引导用户配置「转发到 @apoints.email」，
+    // 系统发送测试邮件并检索被转发的邮件来确认绑定（原 OAuth 已废弃）。
+    const handleConnectExchange = () => {
+        const saved = XJTLUaccount || "";
+        setExchangeForwardEmail(saved.includes("@") ? saved : "");
+        setExchangeForwardStep(1);
+        setExchangeForwardCode("");
+        setExchangeForwardTarget("");
+        setExchangeForwardError("");
+        setExchangeForwardConfirmed(false);
+        setShowExchangeForwardModal(true);
     };
 
-    const executeConnectExchange = async (e: React.FormEvent) => {
+    const closeExchangeForwardModal = () => {
+        setShowExchangeForwardModal(false);
+        if (exchangeForwardStep >= 2 && !exchangeForwardConfirmed) {
+            cancelExchangeForward().catch(() => {});
+        }
+        setExchangeForwardStep(1);
+    };
+
+    const handleExchangeForwardSend = async (e: React.FormEvent) => {
         e.preventDefault();
-        setShowExchangeConnectModal(false);
-        setLoading(true);
-        setStatusError("");
+        const email = exchangeForwardEmail.trim();
+        if (!email) return;
+        setExchangeForwardLoading(true);
+        setExchangeForwardError("");
         try {
-            await startExchangeAuth(exchangeEmail);
-            // 如果绑定成功，通常会刷新整个页面或通过消息通知。
-            // 这里只是简单的更新状态。实际的账户信息更新依赖于后端的绑定逻辑。
-            if (exchangeEmail) {
-                setXJTLUaccount(exchangeEmail);
-                localStorage.setItem("user_XJTLUaccount", exchangeEmail);
-            }
-            // 为了确保状态最新，延迟一点再刷新
-            setTimeout(() => handleRefreshStatus(), 1000);
+            const result = await startExchangeForward(email);
+            setExchangeForwardCode(result.code);
+            setExchangeForwardTarget(result.forwardTarget);
+            setExchangeForwardStep(2);
         } catch (err: any) {
-            setStatusError(t("settings.exchangeBindFailed"));
+            setExchangeForwardError(
+                err.message || t("settings.exchangeForwardSendFailed"),
+            );
         } finally {
-            setLoading(false);
+            setExchangeForwardLoading(false);
+        }
+    };
+
+    const handleExchangeForwardCheck = async () => {
+        setExchangeForwardLoading(true);
+        setExchangeForwardError("");
+        try {
+            const result = await checkExchangeForward();
+            if (result.confirmed) {
+                setExchangeForwardConfirmed(true);
+                setExchangeForwardStep(3);
+                const email = exchangeForwardEmail.trim();
+                if (email) {
+                    setXJTLUaccount(email);
+                    localStorage.setItem("user_XJTLUaccount", email);
+                }
+                setTimeout(() => handleRefreshStatus(), 500);
+            } else {
+                setExchangeForwardError(
+                    t("settings.exchangeForwardNotYet"),
+                );
+            }
+        } catch (err: any) {
+            setExchangeForwardError(
+                err.message || t("settings.exchangeForwardCheckFailed"),
+            );
+        } finally {
+            setExchangeForwardLoading(false);
         }
     };
 
@@ -479,6 +539,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                 setTimeout(() => setTokenCopied(false), 2000);
             });
         }
+    };
+
+    const handleCopyId = () => {
+        if (!userId) return;
+        navigator.clipboard.writeText(userId).then(() => {
+            setIdCopied(true);
+            setTimeout(() => setIdCopied(false), 2000);
+        });
     };
 
     const handleSyncTimetable = async () => {
@@ -1090,6 +1158,35 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                         </div>
                         <div className="info-item">
                             <span className="info-label">
+                                {t("settings.accountId")}:
+                            </span>
+                            <span className="info-value info-id">
+                                <span className="info-id-text">
+                                    {userId || t("settings.notSet")}
+                                </span>
+                                <button
+                                    className="copy-id-btn"
+                                    onClick={handleCopyId}
+                                    title={
+                                        idCopied
+                                            ? t("settings.idCopied")
+                                            : t("settings.copyId")
+                                    }
+                                    disabled={!userId}
+                                >
+                                    {idCopied ? (
+                                        <Check size={14} />
+                                    ) : (
+                                        <Copy size={14} />
+                                    )}
+                                    {idCopied
+                                        ? t("settings.idCopied")
+                                        : t("settings.copyId")}
+                                </button>
+                            </span>
+                        </div>
+                        <div className="info-item">
+                            <span className="info-label">
                                 {t("settings.xjtluAccount")}:
                             </span>
                             <span className="info-value">
@@ -1181,6 +1278,41 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                                     {lang.label}
                                 </Button>
                             ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{t("settings.feedback")}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div
+                            style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                flexWrap: "wrap",
+                                gap: 12,
+                            }}
+                        >
+                            <div style={{ flex: 1 }}>
+                                <p
+                                    style={{
+                                        margin: 0,
+                                        color: "var(--color-text-medium)",
+                                        fontSize: "0.9rem",
+                                        lineHeight: 1.6,
+                                    }}
+                                >
+                                    {t("settings.feedbackDesc")}
+                                </p>
+                            </div>
+                            <Button
+                                onClick={() => setShowFeedbackModal(true)}
+                            >
+                                {t("settings.feedbackButton")}
+                            </Button>
                         </div>
                     </CardContent>
                 </Card>
@@ -1417,6 +1549,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                         {message}
                     </div>
                 )}
+
+                <FeedbackModal
+                    isOpen={showFeedbackModal}
+                    onClose={() => setShowFeedbackModal(false)}
+                />
             </div>
         );
     };
@@ -1590,55 +1727,217 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, view }) => {
                 </MobileActionBarProvider>
 
                 <Modal
-                    isOpen={showExchangeConnectModal}
-                    onClose={() => setShowExchangeConnectModal(false)}
-                    title={t("settings.connectExchangeMail")}
+                    isOpen={showExchangeForwardModal}
+                    onClose={closeExchangeForwardModal}
+                    title={t("settings.exchangeForwardTitle")}
                 >
-                    <div className="exchange-connect-modal">
-                        <p
-                            className="modal-description"
-                            style={{
-                                marginBottom: "15px",
-                                color: "var(--color-text-secondary)",
-                                fontSize: "14px",
-                            }}
-                        >
-                            {t("settings.exchangeConnectDesc")}
-                        </p>
-                        <form onSubmit={executeConnectExchange}>
-                            <Input
-                                label={t("settings.schoolEmail")}
-                                type="email"
-                                id="exchangeEmail"
-                                value={exchangeEmail}
-                                onChange={(e) =>
-                                    setExchangeEmail(e.target.value)
-                                }
-                                required
-                                placeholder={t("settings.exchangePlaceholder")}
-                            />
-                            <div
-                                style={{
-                                    marginTop: "20px",
-                                    display: "flex",
-                                    justifyContent: "flex-end",
-                                    gap: "10px",
-                                }}
-                            >
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={() =>
-                                        setShowExchangeConnectModal(false)
-                                    }
+                    <div className="exchange-forward-modal">
+                        {/* 步骤 1：填写学校邮箱并发送测试邮件 */}
+                        {exchangeForwardStep === 1 && (
+                            <>
+                                <p
+                                    className="modal-description"
+                                    style={{
+                                        marginBottom: "15px",
+                                        color: "var(--color-text-secondary)",
+                                        fontSize: "14px",
+                                        lineHeight: 1.7,
+                                    }}
                                 >
-                                    {t("common.cancel")}
-                                </Button>
-                                <Button type="submit">
-                                    {t("settings.goToAuth")}
-                                </Button>
-                            </div>
-                        </form>
+                                    {t("settings.exchangeForwardIntro")}
+                                </p>
+                                <form onSubmit={handleExchangeForwardSend}>
+                                    <Input
+                                        label={t("settings.schoolEmail")}
+                                        type="email"
+                                        id="exchangeForwardEmail"
+                                        value={exchangeForwardEmail}
+                                        onChange={(e) =>
+                                            setExchangeForwardEmail(
+                                                e.target.value,
+                                            )
+                                        }
+                                        required
+                                        placeholder={t(
+                                            "settings.exchangeForwardEmailPlaceholder",
+                                        )}
+                                    />
+                                    {exchangeForwardError && (
+                                        <div
+                                            className="error-message"
+                                            style={{ marginTop: 10 }}
+                                        >
+                                            {exchangeForwardError}
+                                        </div>
+                                    )}
+                                    <div
+                                        style={{
+                                            marginTop: "20px",
+                                            display: "flex",
+                                            justifyContent: "flex-end",
+                                            gap: "10px",
+                                        }}
+                                    >
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={closeExchangeForwardModal}
+                                        >
+                                            {t("common.cancel")}
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            disabled={
+                                                exchangeForwardLoading ||
+                                                !exchangeForwardEmail.trim()
+                                            }
+                                        >
+                                            {exchangeForwardLoading ? (
+                                                <>
+                                                    <Loader2
+                                                        size={14}
+                                                        className="animate-spin"
+                                                    />{" "}
+                                                    {t("common.sending")}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {t(
+                                                        "settings.exchangeForwardSend",
+                                                    )}{" "}
+                                                    <ArrowRight size={16} />
+                                                </>
+                                            )}
+                                        </Button>
+                                    </div>
+                                </form>
+                            </>
+                        )}
+
+                        {/* 步骤 2：配置转发 + 检查绑定状态 */}
+                        {exchangeForwardStep === 2 && (
+                            <>
+                                <div className="exchange-forward-code">
+                                    <span className="exchange-forward-code-label">
+                                        {t(
+                                            "settings.exchangeForwardCodeLabel",
+                                        )}
+                                    </span>
+                                    <code className="exchange-forward-code-value">
+                                        {exchangeForwardCode}
+                                    </code>
+                                </div>
+                                <ol className="exchange-forward-steps">
+                                    <li>
+                                        {t(
+                                            "settings.exchangeForwardStep1",
+                                        )}
+                                    </li>
+                                    <li>
+                                        {t(
+                                            "settings.exchangeForwardStep2",
+                                        )}
+                                    </li>
+                                    <li>
+                                        {t(
+                                            "settings.exchangeForwardStep3",
+                                            {
+                                                target: exchangeForwardTarget,
+                                            },
+                                        )}
+                                    </li>
+                                    <li>
+                                        {t(
+                                            "settings.exchangeForwardStep4",
+                                        )}
+                                    </li>
+                                </ol>
+                                {exchangeForwardError && (
+                                    <div
+                                        className="error-message"
+                                        style={{ marginTop: 10 }}
+                                    >
+                                        {exchangeForwardError}
+                                    </div>
+                                )}
+                                <div
+                                    style={{
+                                        marginTop: "20px",
+                                        display: "flex",
+                                        justifyContent: "flex-end",
+                                        gap: "10px",
+                                    }}
+                                >
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={() =>
+                                            setExchangeForwardStep(1)
+                                        }
+                                    >
+                                        {t(
+                                            "settings.exchangeForwardBack",
+                                        )}
+                                    </Button>
+                                    <Button
+                                        onClick={handleExchangeForwardCheck}
+                                        disabled={exchangeForwardLoading}
+                                    >
+                                        {exchangeForwardLoading ? (
+                                            <>
+                                                <Loader2
+                                                    size={14}
+                                                    className="animate-spin"
+                                                />{" "}
+                                                {t(
+                                                    "settings.exchangeForwardChecking",
+                                                )}
+                                            </>
+                                        ) : (
+                                            t(
+                                                "settings.exchangeForwardCheck",
+                                            )
+                                        )}
+                                    </Button>
+                                </div>
+                            </>
+                        )}
+
+                        {/* 步骤 3：绑定成功 */}
+                        {exchangeForwardStep === 3 && (
+                            <>
+                                <div className="exchange-forward-success">
+                                    <CheckCircle2
+                                        size={40}
+                                        className="exchange-forward-success-icon"
+                                    />
+                                    <p>
+                                        {t(
+                                            "settings.exchangeForwardSuccess",
+                                            {
+                                                email: exchangeForwardEmail.trim(),
+                                                target: exchangeForwardTarget,
+                                            },
+                                        )}
+                                    </p>
+                                </div>
+                                <div
+                                    style={{
+                                        marginTop: "20px",
+                                        display: "flex",
+                                        justifyContent: "flex-end",
+                                        gap: "10px",
+                                    }}
+                                >
+                                    <Button
+                                        variant="primary"
+                                        onClick={closeExchangeForwardModal}
+                                    >
+                                        {t("common.done")}
+                                    </Button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </Modal>
 

@@ -35,6 +35,7 @@ import { initializeArchiveRoutes } from "./routes/archiveRoutes.js";
 import { initializeMembershipRoutes } from "./routes/membershipRoutes.js";
 import { initializeReportRoutes } from "./routes/reportRoutes.js";
 import { initializeAppUpdateRoutes } from "./routes/appUpdateRoutes.js";
+import { initializeExchangeForwardRoutes } from "./routes/exchangeForwardRoutes.js";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
@@ -411,6 +412,12 @@ app.use("/api", initializeRejectionBufferRoutes(authenticateToken));
 
 // 学习通 / Chaoxing
 app.use("/api", initializeChaoxingRoutes(authenticateToken));
+
+// Exchange 邮箱转发绑定（引导式）
+app.use(
+    "/api",
+    initializeExchangeForwardRoutes(authenticateToken, cafConfig),
+);
 
 // 跨设备提醒已读状态同步
 app.use("/api", initializeReminderStateRoutes(authenticateToken));

@@ -95,11 +95,15 @@ export {
     getEbridgeStatus,
     syncTimetable,
     deleteTimetableTasks,
+    startExchangeForward,
+    checkExchangeForward,
+    cancelExchangeForward,
 } from "./integrations";
 export type {
     SmtpConfig,
     MicrosoftTodoStatus,
     EbridgeStatus,
+    ExchangeForwardStartResult,
     SyncTimetableResponse,
     DeleteTimetableResponse,
 } from "./integrations";

@@ -12,6 +12,8 @@
 | [user-status.md](user-status.md) | 用户状态（本周日程完成统计） | 2 |
 | [community.md](community.md) | 社区地区 / 四项 status 排名 | 9 |
 | [rejection-buffer.md](rejection-buffer.md) | 事件拒绝缓冲池（24h TTL） | 3 |
+| [reports.md](reports.md) | 用户反馈 / 举报 | 5 |
+| [app-update.md](app-update.md) | 应用版本更新检查 / 配置 | 5 |
 | [tasks.md](tasks.md) | 日程（Task）CRUD / 日程队列 | 13 |
 | [todos.md](todos.md) | 待办（Todo）CRUD / 标签 / 按标签反查 | 12 |
 | [email.md](email.md) | 邮件列表 / 搜索 / AI 处理 | 5 |

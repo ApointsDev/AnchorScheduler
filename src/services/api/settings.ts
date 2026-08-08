@@ -59,10 +59,17 @@ export const setStripReplyPrefix = async (enabled: boolean): Promise<void> => {
     });
 };
 
-export const getUserSettings = async (): Promise<{
+export interface UserSettings {
+    id: string;
+    email: string;
+    name: string;
+    avatar: string | null;
+    signature: string | null;
     autoSchedulePromotions: boolean;
     stripReplyPrefix: boolean;
-}> => {
+}
+
+export const getUserSettings = async (): Promise<UserSettings> => {
     const token = getToken();
     if (!token) throw new Error("用户未登录");
     const response = await customFetch("/api/me", {

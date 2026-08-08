@@ -17,6 +17,8 @@ import {
     type AdminUserSchedule,
 } from "../../services/adminApi";
 import RedeemCodePanel from "./RedeemCodePanel";
+import AdminReportsTab from "./AdminReportsTab";
+import AdminAppUpdateTab from "./AdminAppUpdateTab";
 import logo from "../../assets/logo.svg";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import "../../styles/Admin.css";
@@ -698,8 +700,10 @@ function DeleteConfirmModal({
 
 export default function AdminPanel() {
     const { t } = useTranslation();
-    // 标签页：users（用户管理） / redeem（兑换码）
-    const [activeTab, setActiveTab] = useState<"users" | "redeem">("users");
+    // 标签页：users（用户管理） / redeem（兑换码） / reports（反馈举报） / app-update（版本更新）
+    const [activeTab, setActiveTab] = useState<
+        "users" | "redeem" | "reports" | "app-update"
+    >("users");
     const [fieldMeta, setFieldMeta] = useState<Record<string, AdminFieldMeta>>(
         {},
     );
@@ -809,7 +813,11 @@ export default function AdminPanel() {
                     />
                     {activeTab === "redeem"
                         ? t("admin.redeemCodeManagement")
-                        : t("admin.userManagement")}
+                        : activeTab === "reports"
+                          ? t("admin.reportsManagement")
+                          : activeTab === "app-update"
+                            ? t("admin.appUpdateManagement")
+                            : t("admin.userManagement")}
                 </h1>
                 {activeTab === "users" && (
                     <div className="admin-toolbar">
@@ -853,10 +861,26 @@ export default function AdminPanel() {
                 >
                     {t("admin.redeemCodeManagement")}
                 </button>
+                <button
+                    className={`admin-tab ${activeTab === "reports" ? "active" : ""}`}
+                    onClick={() => setActiveTab("reports")}
+                >
+                    {t("admin.reportsManagement")}
+                </button>
+                <button
+                    className={`admin-tab ${activeTab === "app-update" ? "active" : ""}`}
+                    onClick={() => setActiveTab("app-update")}
+                >
+                    {t("admin.appUpdateManagement")}
+                </button>
             </div>
 
             {activeTab === "redeem" ? (
                 <RedeemCodePanel />
+            ) : activeTab === "reports" ? (
+                <AdminReportsTab />
+            ) : activeTab === "app-update" ? (
+                <AdminAppUpdateTab />
             ) : (
                 <>
                     {error && <div className="admin-error">{error}</div>}
